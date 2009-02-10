@@ -1,9 +1,14 @@
 .. Structure and Interpretation of Computer Programs Notes
 .. :Author: Jason Yamada-Hanff
 
+================================================
 Chapter 1. Building Abstractions with Procedures
 ================================================
 :Started: 2008-02-03
+
+
+1.1 Elements of Programming
+===========================
 
 Three main mechanisms for combining ideas:
 
@@ -103,8 +108,42 @@ An example:
  (+ 36 100)                          ; evaluate subexpressions,
  136                                 ; and evaluate the primitive combination.
 
-ex. 1.5 
+
+Exercises
+---------
+
+1.1
+~~~
+
+.. literalinclude:: src/exercises/ch1/ex-1.1.scm
+   :language: scheme
+
+1.2
+~~~
+Convert the following into `prefix notation`:
 
 .. math::
 
    \frac{5+4+(2-(3-(6+\frac{4}{5})))}{3(6-2)(2-7)}
+
+.. literalinclude:: src/exercises/ch1/ex-1.2.scm
+   :language: scheme
+
+1.3
+~~~
+
+.. literalinclude:: src/exercises/ch1/ex-1.3.scm
+   :language: scheme
+
+1.4
+~~~
+
+.. literalinclude:: src/exercises/ch1/ex-1.4.scm
+   :language: scheme
+
+1.5
+~~~
+
+.. literalinclude:: src/exercises/ch1/ex-1.5.scm
+   :language: scheme
+
