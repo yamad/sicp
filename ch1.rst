@@ -21,7 +21,11 @@ Two kinds of elements in programming:
  * procedures
  * data
 
-Important aspects of lisp syntax:
+
+1.1.1 Expressions
+-----------------
+
+ * `prefix notation`
 
 .. code-block:: scheme
 
@@ -30,11 +34,24 @@ Important aspects of lisp syntax:
    7
    > (+ (* 2 2) (/ 4 2))
    6
+..
+
+ * every expression has a value
+
+
+1.1.2 Naming and the Environment
+--------------------------------
+
+.. code-block:: scheme
 
    ;; naming with `define`
    > (define size 2)
    > size
    2
+
+environment
+    the memory space that keeps track of name-object pairs (variables and
+    their values)
 
 
 1.1.3 Evaluating Combinations
@@ -108,6 +125,67 @@ An example:
  (+ 36 100)                          ; evaluate subexpressions,
  136                                 ; and evaluate the primitive combination.
 
+The substitution model is a *model* -- simplified and incomplete.  More
+complex and refined models will show up later.
+
+Applicative order vs normal order
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+normal-order evaluation
+    "fully expand and then reduce" evaluation model.  In this model,
+    expressions expand until only primitive expressions are left.  The
+    expressions are then evaluated (reduced) to the final answer
+
+applicative-order evaluation
+    "evaluate the arguments and then apply" evaluation model.  This is the
+    model that Lisp actually uses.
+
+For procedures that can be modeled by substitution, these models produce the
+same value.  But they *may* give different results in particular contexts.
+
+
+1.1.6 Conditional Expressions and Predicates
+--------------------------------------------
+
+``cond`` -- Scheme construct for a *case analysis*
+    setup as a series of *clauses*, with a *predicate* and a *consequent
+    expression*.
+
+Predicates evaluate to *true* (``#t``) or *false* (``#f``).  All values are
+true, unless they are false.
+
+.. code-block:: scheme
+
+   (cond (<p1> <e1>)
+         (<p2> <e2>)
+         (<pn> <en>))
+
+   ;; example
+   (cond ((> x 0) x)
+         ((= x 0) 0)
+         ((< x 0) (- x)))
+
+``if`` -- restricted conditional handling two cases only
+
+.. code-block:: scheme
+   
+   (if <predicate> <consequent> <alternative>)
+
+   ;; example
+   (if (< x 0) (- x) x))
+
+``and``, ``or``, and ``not`` -- logical composition operations
+
+.. code-block:: scheme
+   
+   (and <e1> ... <en>)
+   ;; false if any <e>'s are false. exits evaluation on first false
+
+   (or <e1> ... <en>)
+   ;; value of the first true <e>. false if no <e>'s are true
+
+   (not <e>)
+   ;; true when <e> is false. false otherwise
 
 Exercises
 ---------
@@ -141,9 +219,19 @@ Convert the following into `prefix notation`:
 .. literalinclude:: src/exercises/ch1/ex-1.4.scm
    :language: scheme
 
+Operators can be compound expressions.  This procedure will add ``a`` and
+``b`` when ``b`` is greater than 0, and subtract ``b`` from ``a`` otherwise.
+Operators are subject to expression constructs just like operands, which is
+very cool.
+
 1.5
 ~~~
 
+Applicative-order interpreters will never terminate, because the evaluation of
+the operand ``(p)`` creates an infinite loop.
+
+Normal-order interpreters will go step-by-step and never need to hit ``(p)``
+since the ``if`` predicate is true.
+
 .. literalinclude:: src/exercises/ch1/ex-1.5.scm
    :language: scheme
-
