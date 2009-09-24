@@ -12,9 +12,14 @@ Chapter 1. Building Abstractions with Procedures
 
 Three main mechanisms for combining ideas:
 
- primitive expressions : simple entities
- means of combination : build compound elements out of simple ones
- means of abstraction : naming of compound elements
+ primitive expressions
+     simple entities
+
+ means of combination
+     build compound elements out of simple ones
+
+ means of abstraction
+     naming of compound elements
 
 Two kinds of elements in programming:
 
@@ -234,4 +239,93 @@ Normal-order interpreters will go step-by-step and never need to hit ``(p)``
 since the ``if`` predicate is true.
 
 .. literalinclude:: src/exercises/ch1/ex-1.5.scm
+   :language: scheme
+
+
+1.1.7 Example: Newton's Square Root Approximation
+-------------------------------------------------
+
+declarative descriptions/knowledge
+    *what is* or describing the properties of things
+
+imperative descriptions/knowledge
+    *how to* or describing how to do things
+
+In general, computer science is concerned with imperative knowledge,
+where mathematics is more interested in declarative knowledge.
+
+For instance, a mathematical description of the square-root function would be:
+
+.. math::
+   \sqrt{x} = \mathrm{the}\ y\ \mathrm{ such\ that}\ y \geq 0\ \mathrm{and}\ y^2 = x
+
+A pseudo-Lisp definition is not useable for calculation either:
+
+.. code-block:: scheme
+   
+   (define (sqrt x)
+     (the y (and (>= y 0)
+                 (= (square y) x))))
+
+Newton's method of successive approximations
+    Given a guess :math:`y` for the value of :math:`\sqrt{x}`, a
+    better guess can be obtained by averaging :math:`y` with
+    :math:`x/y`
+
+Simple lisp code for this method would go as follows:
+
+.. literalinclude:: src/examples/ch1/sqrt.scm
+   :language: scheme
+
+.. note:: The language constructs learned so far constitutes a
+   Turing-complete language (I think this is what they are trying to
+   say).  With implementation of tail recursion in Scheme, procedure
+   calls like in `sqrt-iter` can substitute for special looping and
+   iteration constructs.
+
+
+*Exercises*
+-----------
+
+1.6
+~~~
+
+`if` is implemented as special form so that it can use normal-order
+evaluation rather than applicative-order evaluation.  While a
+user-defined `if` function would have the same syntax as the built-in
+special `if`, it would use applicative-order evaluation like `cond`.
+Since applicative-order evaluation always evaluates all
+arguments/subexpressions, a procedure that calls itself would create
+an infinite loop.  Normal-order evaluation only evaluates arguments as
+needed, and so would not have this problem.
+
+An example makes this clear:
+
+.. literalinclude:: src/exercises/ch1/ex-1.6.scm
+   :language: scheme
+
+Since the `sqrt-iter` procedure calls itself in the else-clause, the
+`new-if` version of this procedure will create an infinite loop as the
+else-clause will evaluate over and over even when it is not needed.
+
+1.7
+~~~
+
+`good-enough?` based on a predeterminate value is inappropriate for
+small numbers because the defined tolerance will stop the
+approximation too soon.  That is, a predefined tolerance assumes a
+certain order of magnitude of the input numbers.  For instance, if the
+starting number is already smaller than the tolerance, the difference
+between it and a guess will definitely be smaller than the tolerance
+and the approximation will stop on the first try.
+
+For large numbers, if calculation precision is poor, the machine will
+not be able to represent any change in the numbers at all and will
+therefore never terminates.  Thus, in both cases, an absolute
+tolerance does not handle edge cases well.
+
+The code below shows the problem with the old version, and an updated
+`good-enough?` function that uses a relative tolerance:
+
+.. literalinclude:: src/exercises/ch1/ex-1.7.scm
    :language: scheme
