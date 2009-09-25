@@ -1,9 +1,9 @@
 .. Structure and Interpretation of Computer Programs Notes
 .. :Author: Jason Yamada-Hanff
 
-================================================
-Chapter 1. Building Abstractions with Procedures
-================================================
+==================================================
+ Chapter 1. Building Abstractions with Procedures
+==================================================
 :Started: 2008-02-03
 
 
@@ -329,3 +329,123 @@ The code below shows the problem with the old version, and an updated
 
 .. literalinclude:: src/exercises/ch1/ex-1.7.scm
    :language: scheme
+
+
+1.8
+~~~
+
+An implementation of Newton's approximation method for cube roots,
+where an approximation `y` for the cube root of `x` can be improved
+by:
+
+.. math::
+   \frac{x/y^2 + 2y}{3}
+
+.. literalinclude:: src/exercises/ch1/ex-1.8.scm
+   :language: scheme
+
+1.1.8 Procedures as Black-Box Abstractions
+------------------------------------------
+
+Decomposition of a problem into subproblems.  Note this was done in
+Newton's sqrt approximation example.
+
+ * each procedure should carry out an identifiable task
+ * procedures that hide implementation can be used modularly
+
+ procedural abstraction 
+     to use a procedure, should be able to disregard implementation (*how*)
+
+Local names
+~~~~~~~~~~~
+
+Names used within a procedure should not affect names--potentially the
+same--outside of the procedure.
+
+Inside a procedure, formal parameter names do not matter.  The
+procedure binds those names as *bound variables*.  The names only have
+meaning within the *scope* of the procedure.  The alternative is *free
+variables*.  These names matter since they reference definitions
+external to the procedure.
+
+ scope
+     the set of expressions for which a binding defines a name
+
+Internal definitions and block structure
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ block structure
+     procedures that are only relevant as subprocedures of other procedures
+     can be hidden within the parent procedure.  The subprocedures are then
+     local to the parent procedures.  *Always include all definitions before use*
+
+.. code-block:: scheme
+
+   (define (sqrt-iter guess x)
+     (if (good-enough? guess x)
+         guess
+         (sqrt-iter (improve guess x)
+                     x)))
+
+   (define (improve guess x)
+     (average guess (/ x guess)))
+
+   (define (average x y)
+     (/ (+ x y) 2))
+
+   (define (good-enough? guess x)
+     (< (abs (- (square guess) x)) 0.001))
+
+   (define (square x) (* x x))
+
+   (define (sqrt x)
+     (sqrt-iter 1.0 x))
+
+Only `sqrt` is important to other users, so use block structure:
+
+.. code-block:: scheme
+
+   (define (square x) (* x x))
+   (define (average x y)
+     (/ (+ x y) 2))
+
+   (define (sqrt x)
+     (define (improve guess x)
+       (average guess (/ x guess)))
+     (define (good-enough? guess x)
+       (< (abs (- (square guess) x)) 0.001))
+     (define (sqrt-iter guess x)
+       (if (good-enough? guess x)
+           guess
+           (sqrt-iter (improve guess x) x)))
+     (sqrt-iter 1.0 x))
+
+ lexical scoping
+     use variables bound in enclsoing scope as free variables in subroutines
+
+.. code-block:: scheme
+
+   ;; remove x as formal parameter from subprocedures, already defined by sqrt
+   (define (sqrt x)
+     (define (improve guess)
+       (average guess (/ x guess)))
+     (define (good-enough? guess)
+       (< (abs (- (square guess) x)) 0.001))
+     (define (sqrt-iter guess)
+       (if (good-enough? guess)
+           guess
+           (sqrt-iter (improve guess))))
+     (sqrt-iter 1.0))
+
+1.2 Procedures and the Processes They Generate
+==============================================
+
+"The ability to visualize the consequences of the actions under
+consideration is crucial to becoming an expert programmer."
+
+*local evolution* of a computational process is described by a procedure.
+Will be one of a set of common patterns.
+
+1.2.1 Linear Recursion and Iteration
+------------------------------------
+
