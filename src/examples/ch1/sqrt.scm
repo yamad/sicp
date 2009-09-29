@@ -1,3 +1,6 @@
+#!/usr/bin/env mzscheme
+#lang scheme
+
 ;;; SICP section 1.1.7
 ;;; Newton's Method to Approximate Square Roots
 
@@ -31,24 +34,30 @@
 ;; Tests
 
 ;; import schemeunit
-(require (planet schematics/schemeunit))
+(require (planet schematics/schemeunit:3))
+(require (planet schematics/schemeunit:3/text-ui))
 
-(test-case
- "tests" (
- (check-eqv?
-  (sqrt 9)
-  3)
+(define tests
+  (test-suite
+   "Tests"
+   (check-=
+    (sqrt 9)
+    3
+    0.001)
 
- (check-eq?
-  (sqrt (+ 100 37))
-  11.704699917758145)
+   (check-=
+    (sqrt (+ 100 37))
+    11.704699917758145
+    0.001)
 
- (check-eq?
-  (sqrt (+ (sqrt 2) (sqrt 3)))
-  1.7739279023207892)
+   (check-=
+    (sqrt (+ (sqrt 2) (sqrt 3)))
+    1.7739279023207892
+    0.001)
 
- (check-eq?
-  (square (sqrt 1000))
-  1000.000369924366)
- ))
-(run-tests 'tests')
+   (check-=
+    (square (sqrt 1000))
+    1000.000369924366
+    0.001)))
+
+(run-tests tests)

@@ -420,8 +420,8 @@ Only `sqrt` is important to other users, so use block structure:
            (sqrt-iter (improve guess x) x)))
      (sqrt-iter 1.0 x))
 
- lexical scoping
-     use variables bound in enclsoing scope as free variables in subroutines
+**lexical scoping** -- use variables bound in enclsoing scope as free
+variables in subroutines
 
 .. code-block:: scheme
 
@@ -449,3 +449,360 @@ Will be one of a set of common patterns.
 1.2.1 Linear Recursion and Iteration
 ------------------------------------
 
+Linear Recursive Process
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+ * evolution is characterized by an expansion then a contraction
+ * builds a chain of *deferred operations*
+ * number of operations grows linearly
+
+.. code-block:: scheme
+
+   (define (factorial n)
+     (if (= n 1)
+         1
+         (* n (factorial (- n 1))))
+
+   (factorial 4)
+   (* 4 (factorial 3))
+   (* 4 (* 3 (factorial 2))
+   (* 4 (* 3 (* 2 (factorial 1))))
+   (* 4 (* 3 (* 2 1)))
+   (* 4 (* 3 2))
+   (* 4 6)
+   24
+
+Linear Iterative Process
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+ * a process whose state is characterized by *state variables*
+ * a rule describes how the state variables change
+ * computation is fully described at any time by state
+ * evolution is a constant set of operations
+ * number of *steps* grows linearly
+
+.. code-block:: scheme
+
+   (define (factorial n)
+     (fact-iter 1 1 n))
+
+   (define (fact-iter product counter max-count)
+     (if (> counter max-count)
+         product
+         (fact-iter (* counter product)
+                    (+1 counter)
+                    max-count)))
+
+   (factorial 4)
+   (fact-iter 1 1 4)
+   (fact-iter 1 2 4)
+   (fact-iter 2 3 4)
+   (fact-iter 6 4 4)
+   (fact-iter 24 5 4)
+   24
+
+Process vs. Procedure (Recursion)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ recursive procedure
+     a procedure definition that refers to/calls itself
+
+ recursive process
+     a process that evolves by calling itself and building a chain of deferred operations
+
+An iterative process can be described by a recursive procedure.  This
+is true of the iterative process for factorials above.
+
+ tail-recursive
+     a property of a language implementation that executes an
+     iterative process in constant space, even if the procedure is
+     recursive.
+
+
+Exercises
+---------
+
+1.9
+~~~
+
+.. literalinclude:: src/exercises/ch1/ex-1.9.scm
+   :language: scheme
+
+Procedure 1 is recursive, while procedure 2 is iterative.
+
+1.10
+~~~~
+
+Ackerman's function.  A confusing one.  Also, this is a different
+Ackerman's function than is defined elsewhere.
+
+Expanding from inside out instead of outside in is the only way to do
+this reasonably.  The general rule is still unclear to me, but:
+
+ * function `f` (:math:`A(0,n)`) -- :math:`2n`
+ * function `g` (:math:`A(1,n)`) -- :math:`2^n`
+ * function `h` (:math:`A(2,n)`) -- :math:`2^{2^{2\ldots n}}`, :math:`2^{h(n-1)}`
+
+.. literalinclude:: src/exercises/ch1/ex-1.10.scm
+   :language: scheme
+
+
+1.2.2 Tree Recursion
+--------------------
+
+Fibonacci as an example of a *tree recursive process*
+
+.. code-block:: scheme
+
+   (define (fib n)
+     (cond ((= n 0) 0)
+           ((= n 1) 1)
+           (else (+ (fib (- n 1))
+                    (fib (- n 2))))))
+
+
+This process evolves like a *tree*, because each problem is branched
+into two `fib` calls.  Lot of redundancy, `fib(n)` may be recalculated
+many times.
+
+ * number of steps proportional to number of nodes in tree
+ * space required proportional to max depth of tree
+
+
+An iterative implementation
+
+.. code-block:: scheme
+
+   (define (fib n)
+     (fib-iter 1 0 n))
+
+   (define (fib-iter a b count)
+     (if (= count 0)
+         b
+         (fib-iter (+ a b) a (- count 1))))
+
+
+This iterative version is much faster.  But recursive definitions are
+often more intuitive (closer to the actual description of the
+process).
+
+
+Example: Counting Change
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+"How many ways to change $1.00 given half-dollars, quarters, dimes, nickels, and pennies?"
+
+Ways to make change divided into two groups: ones that do not use the
+"first kind" of coin, and those that do.
+
+.. literalinclude:: src/examples/ch1/count-change.scm
+   :language: scheme
+
+TODO: An interative version of `count-change`
+
+
+Exercises
+---------
+
+1.11
+~~~~
+
+A recursive and iterative process for the function :math:`f`, defined
+by:
+
+.. math::
+
+   f(n) = \left\{
+   \begin{array}{ll}
+       n, & \mbox{if $n < 3$} \\
+       f(n-1) + 2f(n-2) + 3f(n-3), & \mbox{if $n \geq 3$} \\
+   \end{array}
+   \right.
+
+.. literalinclude:: src/exercises/ch1/ex-1.11.scm
+   :language: scheme
+
+1.12
+~~~~
+
+Pascal's triangle
+
+.. literalinclude:: src/exercises/ch1/ex-1.12.scm
+   :language: scheme
+
+1.13
+~~~~
+
+TODO: Mathematical proof of properties of Fibonacci numbers
+
+1.2.3 Orders of Growth
+----------------------
+
+ orders of growth
+     gross measure of resources required by a process as inputs are larger
+
+If :math:`n` is a measure of problem size, :math:`R(n)` is the amount
+of resources required for a problem of size :math:`n`.
+
+ * :math:`n` can be any measure that is appropriate
+
+:math:`R(n) = \theta (f(n))` (has order of growth, not actually an equivalency)
+
+ * :math:`\theta (n)` -- linear
+ * :math:`\theta (1)` -- constant
+ * :math:`\theta (n^2)` -- exponential
+
+Big-O is a crude description.  Generally tracks the largest power polynomial (i.e. :math:`1000n^2` and :math:`3n^2 + 2n + 1` and :math:`n^2` are all :math:`\theta (n^2)`.
+
+1.14
+~~~~
+
+The `count-change` function above has space requirements that grow
+linearly (:math:`\theta (n)`), since tree depth basically depends on
+counting down to zero from the initial amount (the calculation for
+pennies).  Number of steps is exponential growth (:math:`\theta
+(n^2)`) because each step generates two more steps.
+
+(Apparently this is wrong and number of steps is much bigger,
+:math:`\theta (n^c)`, where :math:`c` is the number of coins.)
+
+.. digraph:: cc
+
+   node[shape=plaintext];
+   cc11 -> cc11_5;
+   cc11_5 -> cc11_4;
+   cc11_5 -> cc_39_5;
+   cc11 [label="(count-change 11)"];
+   cc11_5 [label="(cc 11 5)"];
+   cc11_4 [label="(cc 11 4)"];
+   cc_39_5 [label="(cc -39 5)", fontcolor=red];
+
+   cc11_4 -> cc11_3;
+   cc11_4 -> cc_14_4;
+   cc11_3 [label="(cc 11 3)"];
+   cc_14_4 [label="(cc -14 4)", fontcolor=red];
+
+   cc11_3 -> cc11_2;
+   cc11_3 -> cc1_3;
+   cc11_2 [label="(cc 11 2)"];
+   cc1_3 [label="(cc 1 3)"];
+
+   cc1_3 -> cc1_2;
+   cc1_3 -> cc_9_3;
+   cc_9_3 [label="(cc -9 3)", fontcolor=red];
+   cc1_2 [label="(cc 1 2)"];
+
+   cc1_2 -> cc1_1_a;
+   cc1_2 -> cc_4_2;
+   cc1_1_a [label="(cc 1 1)"];
+   cc_4_2 [label="(cc -4 2)", fontcolor=red];
+
+   cc1_1_a -> cc1_0_a;
+   cc1_1_a -> cc0_1_a;
+   cc1_0_a [label="(cc 1 0)", fontcolor=red];
+   cc0_1_a [label="(cc 0 1)", fontcolor=green];
+
+   cc11_2 -> cc11_1;
+   cc11_2 -> cc6_2;
+   cc11_1 [label="(cc 11 1)"];
+   cc6_2 [label="(cc 6 2)"];
+
+   cc6_2 -> cc6_1;
+   cc6_2 -> cc1_2_b;
+   cc6_1 [label="(cc 6 1)"];
+   cc1_2_b [label="(cc 1 2)"];
+
+   cc1_2_b -> cc1_1_b;
+   cc1_2_b -> cc_4_2_b;
+   cc1_1_b [label="(cc 1 1)"];
+   cc_4_2_b [label="(cc -4 2)", fontcolor=red];
+
+   cc1_1_b -> cc1_0_b;
+   cc1_1_b -> cc0_1_b;
+   cc1_0_b [label="(cc 1 0)", fontcolor=red];
+   cc0_1_b [label="(cc 0 1)", fontcolor=green];
+
+   cc6_1 -> cc6_0;
+   cc6_1 -> cc5_1;
+   cc6_0 [label="(cc 6 0)", fontcolor=red];
+   cc5_1 [label="(cc 5 1)"];
+
+   cc5_1 -> cc5_0;
+   cc5_1 -> cc4_1;
+   cc5_0 [label="(cc 5 0)", fontcolor=red];
+   cc4_1 [label="(cc 4 1)"];
+
+   cc4_1 -> cc4_0;
+   cc4_1 -> cc3_1;
+   cc4_0 [label="(cc 4 0)", fontcolor=red];
+   cc3_1 [label="(cc 3 1)"];
+
+   cc3_1 -> cc3_0;
+   cc3_1 -> cc2_1;
+   cc3_0 [label="(cc 3 0)", fontcolor=red];
+   cc2_1 [label="(cc 2 1)"];
+   
+   cc2_1 -> cc2_0;
+   cc2_1 -> cc1_1_c;
+   cc2_0 [label="(cc 2 0)", fontcolor=red];
+   cc1_1_c [label="(cc 1 1)"];   
+
+   cc1_1_c -> cc1_0_c;
+   cc1_1_c -> cc0_1_c;
+   cc1_0_c [label="(cc 1 0)", fontcolor=red];
+   cc0_1_c [label="(cc 0 1)", fontcolor=green];
+
+   cc11_1 -> cc11_0;
+   cc11_1 -> cc10_1;
+   cc11_0 [label="(cc 11 0)", fontcolor=red];
+   cc10_1 [label="(cc 10 1)"];
+
+   cc10_1 -> cc10_0;
+   cc10_1 -> cc9_1;
+   cc10_0 [label="(cc 10 0)", fontcolor=red];
+   cc9_1 [label="(cc 9 1)"];
+
+   cc9_1 -> cc9_0;
+   cc9_1 -> cc8_1;
+   cc9_0 [label="(cc 9 0)", fontcolor=red];
+   cc8_1 [label="(cc 8 1)"];
+
+   cc8_1 -> cc8_0;
+   cc8_1 -> cc7_1;
+   cc8_0 [label="(cc 8 0)", fontcolor=red];
+   cc7_1 [label="(cc 7 1)"];
+
+   cc7_1 -> cc7_0;
+   cc7_1 -> cc6_1_b;
+   cc7_0 [label="(cc 7 0)", fontcolor=red];
+   cc6_1_b [label="(cc 6 1)"];
+
+   cc6_1_b -> cc6_0_b;
+   cc6_1_b -> cc5_1_b;
+   cc6_0_b [label="(cc 6 0)", fontcolor=red];
+   cc5_1_b [label="(cc 5 1)"];
+
+   cc5_1_b -> cc5_0_b;
+   cc5_1_b -> cc4_1_b;
+   cc5_0_b [label="(cc 5 0)", fontcolor=red];
+   cc4_1_b [label="(cc 4 1)"];
+
+   cc4_1_b -> cc4_0_b;
+   cc4_1_b -> cc3_1_b;
+   cc4_0_b [label="(cc 4 0)", fontcolor=red];
+   cc3_1_b [label="(cc 3 1)"];
+
+   cc3_1_b -> cc3_0_b;
+   cc3_1_b -> cc2_1_b;
+   cc3_0_b [label="(cc 3 0)", fontcolor=red];
+   cc2_1_b [label="(cc 2 1)"];
+   
+   cc2_1_b -> cc2_0_b;
+   cc2_1_b -> cc1_1_d;
+   cc2_0_b [label="(cc 2 0)", fontcolor=red];
+   cc1_1_d [label="(cc 1 1)"];   
+
+   cc1_1_d -> cc1_0_d;
+   cc1_1_d -> cc0_1_d;
+   cc1_0_d [label="(cc 1 0)", fontcolor=red];
+   cc0_1_d [label="(cc 0 1)", fontcolor=green];
