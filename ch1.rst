@@ -652,7 +652,7 @@ of resources required for a problem of size :math:`n`.
  * :math:`\theta (1)` -- constant
  * :math:`\theta (n^2)` -- exponential
 
-Big-O is a crude description.  Generally tracks the largest power polynomial (i.e. :math:`1000n^2` and :math:`3n^2 + 2n + 1` and :math:`n^2` are all :math:`\theta (n^2)`.
+Big-O is a crude description.  Generally tracks the largest power polynomial (i.e. :math:`1000n^2` and :math:`3n^2 + 2n + 1` and :math:`n^2` are all :math:`\theta (n^2)`).
 
 1.14
 ~~~~
