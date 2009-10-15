@@ -1,6 +1,8 @@
 #!/usr/bin/env mzscheme
 #lang scheme
 
+;; Two versions of the function `f`, see the recursive procedure for its definition
+
 ;; Recursive
 (define (f-rec n)
   (if (< n 3)

@@ -654,6 +654,20 @@ of resources required for a problem of size :math:`n`.
 
 Big-O is a crude description.  Generally tracks the largest power polynomial (i.e. :math:`1000n^2` and :math:`3n^2 + 2n + 1` and :math:`n^2` are all :math:`\theta (n^2)`).
 
+.. note::
+   
+   A very useful shorthand that I don't totally understand the
+   underlying math of, found at
+   <http://www.neowin.net/forum/lofiversion/index.php/t178833.html>.
+
+    * If adding/subtracting the constant `m` to the index (controlling
+      variable), `n`, then growth will be :math:`\theta
+      (\dfrac{n}{m})`.
+    * If multiplying/dividing by the constant `m` from the index `n`,
+      then growth will be :math:`\theta (\log_m n)`.
+
+   Not sure if this holds completely.
+
 1.14
 ~~~~
 
@@ -806,3 +820,122 @@ pennies).  Number of steps is exponential growth (:math:`\theta
    cc1_1_d -> cc0_1_d;
    cc1_0_d [label="(cc 1 0)", fontcolor=red];
    cc0_1_d [label="(cc 0 1)", fontcolor=green];
+
+
+1.15
+~~~~
+
+.. code-block:: scheme
+
+   (define (cube x) (* x x x))
+   (define (p x)
+     (-
+      (* 3 x)
+      (* 4 (cube x))))
+   (define (sine angle)
+     (if (not (> (abs angle) 0.1))
+         angle
+         (p (sine (/ angle 3.0)))))
+
+   (sine 12.15)
+   (p (sine 4.05))
+   (p (p (sine 1.35)))
+   (p (p (p (sine 0.45))))
+   (p (p (p (p (sine 0.15)))))
+   (p (p (p (p (p (sine 0.05))))))
+
+`p` is applied 5 times when `sine` is called with 12.15.
+
+Since the "index" is being divided by 3, and steps and space are
+proportional in this case, the growth for both space and steps is
+:math:`\theta (\log_3 n)`.  This can also be expressed as
+:math:`\theta (\frac{\log n}{\log 3})`, which means the same thing.
+
+Becauase this will result in non-integer values, and steps must be in
+integers, number of steps can be giving by the ceiling:
+:math:`ceil(\log_3 n)`.
+
+
+1.2.4 Exponentiation
+--------------------
+
+A recursive definition for exponentiation, takes :math:`\theta (n)`
+space and steps
+
+.. code-block:: scheme
+
+   (define (expt-rec b n)
+     (if (= n 0)
+         1
+         (* b (expt-rec b (- n 1)))))
+
+An iterative definition, takes :math:`\theta (n)` steps
+and :math:`\theta (1)` space
+
+.. code-block:: scheme
+
+   (define (expt-iter b n)
+     (define (iter b counter product)
+       (if (= counter 0)
+           product
+           (iter b
+                 (- counter 1)
+                 (* b product))))
+     (iter b n 1))
+
+
+Successive squaring requires very few steps, and requires
+:math:`\theta (\log n)`.  Computing :math:`b^{2n}` requires only one
+more step than :math:`b^n`, so the size of exponent possible to
+compute doubles with every extra multiplication step.
+
+.. code-block:: scheme
+
+   (define (square x) (* x x))
+   (define (even? x) (= (remainder n 2) 0))
+
+   (define (fast-expt b n)
+     (cond ((= n 0) 1)
+           ((even? n) (square (fast-expt b (/ n 2))))
+           (else (* b (fast-expt b (- n 1))))))
+
+Exercises
+---------
+
+1.16
+~~~~
+
+A procedure that uses successive squaring, uses a logarithmic number
+of steps, and is iterative
+
+.. literalinclude:: src/exercises/ch1/ex-1.16.scm
+   :language: scheme
+
+This one knocked me out, and probably shouldn't have.  Got a workable
+solution on my own, that fulfills the requirements, but is less
+elegant than the solution found online.
+
+Generally, odd exponents tripped me up.  What I missed was that `a`
+didn't have to be a running product, just the right product at the
+end.  I never thought of changing the value of `b` itself, which the
+algorithm from the wiki depends on.
+
+On the other hand, my version sets initial conditions (in a fairly
+simple way) that allows the iteration to carry out the more
+fundamental calculations, in the same number of steps as the wiki
+version.
+
+.. note::
+
+   definition of an **invariant quantity** is a good way to think
+   about iterative algorithms.  in this case, the value of
+   :math:`ab^n` is kept constant through each iteration
+
+
+1.17
+~~~~
+
+A multiplication version of the general algorithm found in exercise 1.16
+
+.. literalinclude:: src/exercises/ch1/ex-1.17.scm
+   :language: scheme
