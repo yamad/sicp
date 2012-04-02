@@ -118,7 +118,7 @@ An example:
    (sum-of-squares (+ a 1) (* a 2)))
 
  ;; the substitution model models evaluation by expansion, so
- 
+
  (f 5)                               ; this expression
  (sum-of-squares (+ a 1) (* a 2))    ; will expand to its definition
  (sum-of-squares (+ 5 1) (* 5 2))    ; and parameters are replaced by arguments.
@@ -173,7 +173,7 @@ true, unless they are false.
 ``if`` -- restricted conditional handling two cases only
 
 .. code-block:: scheme
-   
+
    (if <predicate> <consequent> <alternative>)
 
    ;; example
@@ -182,7 +182,7 @@ true, unless they are false.
 ``and``, ``or``, and ``not`` -- logical composition operations
 
 .. code-block:: scheme
-   
+
    (and <e1> ... <en>)
    ;; false if any <e>'s are false. exits evaluation on first false
 
@@ -262,7 +262,7 @@ For instance, a mathematical description of the square-root function would be:
 A pseudo-Lisp definition is not useable for calculation either:
 
 .. code-block:: scheme
-   
+
    (define (sqrt x)
      (the y (and (>= y 0)
                  (= (square y) x))))
@@ -353,7 +353,7 @@ Newton's sqrt approximation example.
  * each procedure should carry out an identifiable task
  * procedures that hide implementation can be used modularly
 
- procedural abstraction 
+ procedural abstraction
      to use a procedure, should be able to disregard implementation (*how*)
 
 Local names
@@ -655,7 +655,7 @@ of resources required for a problem of size :math:`n`.
 Big-O is a crude description.  Generally tracks the largest power polynomial (i.e. :math:`1000n^2` and :math:`3n^2 + 2n + 1` and :math:`n^2` are all :math:`\theta (n^2)`).
 
 .. note::
-   
+
    A very useful shorthand that I don't totally understand the
    underlying math of, found at
    <http://www.neowin.net/forum/lofiversion/index.php/t178833.html>.
@@ -755,11 +755,11 @@ pennies).  Number of steps is exponential growth (:math:`\theta
    cc3_1 -> cc2_1;
    cc3_0 [label="(cc 3 0)", fontcolor=red];
    cc2_1 [label="(cc 2 1)"];
-   
+
    cc2_1 -> cc2_0;
    cc2_1 -> cc1_1_c;
    cc2_0 [label="(cc 2 0)", fontcolor=red];
-   cc1_1_c [label="(cc 1 1)"];   
+   cc1_1_c [label="(cc 1 1)"];
 
    cc1_1_c -> cc1_0_c;
    cc1_1_c -> cc0_1_c;
@@ -810,11 +810,11 @@ pennies).  Number of steps is exponential growth (:math:`\theta
    cc3_1_b -> cc2_1_b;
    cc3_0_b [label="(cc 3 0)", fontcolor=red];
    cc2_1_b [label="(cc 2 1)"];
-   
+
    cc2_1_b -> cc2_0_b;
    cc2_1_b -> cc1_1_d;
    cc2_0_b [label="(cc 2 0)", fontcolor=red];
-   cc1_1_d [label="(cc 1 1)"];   
+   cc1_1_d [label="(cc 1 1)"];
 
    cc1_1_d -> cc1_0_d;
    cc1_1_d -> cc0_1_d;
@@ -905,7 +905,7 @@ Exercises
 1.16
 ~~~~
 
-A procedure that uses successive squaring, uses a logarithmic number
+A procedure that uses successive squaring uses a logarithmic number
 of steps, and is iterative
 
 .. literalinclude:: src/exercises/ch1/ex-1.16.scm
@@ -939,3 +939,95 @@ A multiplication version of the general algorithm found in exercise 1.16
 
 .. literalinclude:: src/exercises/ch1/ex-1.17.scm
    :language: scheme
+
+1.19
+~~~~
+
+This exercise asks for the solution to a transformation that allows
+calculation of Fibonacci numbers in a logarithmic number of steps.
+
+Generally, the fibonacci transformation :math:`T` maps :math:`a
+\leftarrow a + b` and :math:`b \leftarrow a`. This is a special case
+of the general transformation:
+
+.. math::
+   T_{pq}(a,b) = \left\{
+      \begin{array}{l}
+      a \leftarrow bq + aq + ap \\
+      b \leftarrow bp + aq
+      \end{array} \right.
+
+Note how this reduces to :math:`T`, when :math:`p=0, q=1`:
+
+.. math::
+   T_{pq}(a,b) = \left\{
+   \begin{array}{l}
+   a \leftarrow q(a + b) + p(a) \\
+   b \leftarrow q(a) + p(b)
+   \end{array} \right.
+
+It can be shown that :math:`T_{pq}` applied twice:
+:math:`T_{pq}(T_{pq}(a,b))` is equivalent to :math:`T_{p'q'}`, which
+takes an identical form as :math:`T_{pq}`:
+
+.. math::
+   T_{p'q'}(a,b) = \left\{
+      \begin{array}{l}
+      a \leftarrow bq' + aq' + ap' \\
+      b \leftarrow bp' + aq'
+      \end{array} \right.
+
+The exercise asks for the solution to :math:`p'` and :math:`q'` in
+terms of :math:`p` and :math:`q`:
+
+.. math::
+   T_{pq}(T_{pq}(a,b)) &= \left\{
+   \begin{array}{l}
+   a \leftarrow q((bp + aq) + (bq + aq + ap)) + p(bq + aq + ap) \\
+   b \leftarrow p(bp + ap) + q(bq + aq + ap)
+   \end{array} \right. \\
+   &= \left\{
+   \begin{array}{l}
+   a \leftarrow bqp + bq^2 + 2aq^2 + aqp + bpq + apq + ap^2) \\
+   b \leftarrow bp^2 + ap^2 + bq^2 + aq^2 + apq
+   \end{array} \right. \\
+   &= \left\{
+   \begin{array}{l}
+   a \leftarrow a(2q^2 + 2pq + p^2) + b(q^2 + 2pq) \\
+   b \leftarrow a(q^2 + 2pq) + b(p^2 + q^2)
+   \end{array} \right.
+
+
+Thus, from the mapping of :math:`b`, if :math:`T_{p'q'} = T^2_{pq}` then:
+
+.. math::
+   p' &= p^2 + q^2 \\
+   q' &= q^2 + 2pq
+
+
+1.25
+~~~~
+
+No, integrating the exponentiation process into the expmod procedure
+is much faster than calculating the entire exponential first. For
+large numbers, the exponential calculation will result in a very large
+intermediate value and likely requires slow machine instructions.
+
+The expmod function, as written, may even create more steps than
+Alyssa's version, but it is always operating with small numbers.
+
+Testing out both expmod functions shows that the original version runs
+at sub-millisecond speed while Alyssa's version did not finish after
+more than a minute.
+
+
+1.26
+~~~~
+
+Replacing ```(square x)``` with ```(* x x)``, in an applicative-order
+model, requires that ```x``` is calculated twice rather than just
+once. If ```x``` is an expression that can grow large, this
+duplication is especially expensive.
+
+Shortly, the original function is linear recursive while the rewritten
+version is tree recursive.
