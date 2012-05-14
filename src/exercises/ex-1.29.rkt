@@ -1,5 +1,6 @@
 #lang racket
 
+;; exercise 1.29
 ;; My implementation of Simpson's Rule for approximating the integral.
 ;; Redefines the sum operation so that it keeps track of the iteration
 ;; index as well. The increment directly increments the value of x by
