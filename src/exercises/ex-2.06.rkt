@@ -6,7 +6,7 @@
   (lambda (f) (lambda (x) (f ((n f) x)))))
 
 ;; one and two defined "directly"
-;; (repeated application of f to x
+;; (repeated application of f to x)
 (define one
   (lambda (f) (lambda (x) (f x))))
 (define two
