@@ -7,7 +7,8 @@
           ((not (pair? items)) items)
           (else
            (iter (cdr items)
-                 (cons (iter (car items) '()) result)))))
+                 (cons (deep-reverse (car items))
+                       result)))))
   (iter l '()))
 
 (deep-reverse (list (list 1 2) (list 3 4) 5 6))
