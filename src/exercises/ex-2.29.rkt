@@ -72,5 +72,6 @@
 
 ;; then only the following changes are needed:
 ;
+
 ;; (define right-branch cdr)
 ;; (define branch-structure cdr)
