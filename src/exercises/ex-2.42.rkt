@@ -20,11 +20,10 @@
 (define (safe? k pos)
   (define (safe-iter new n pos)
     (cond ((null? pos) #t)
-          ((or (= (car pos) new)
-               (and (= k n)             ; check diagonals on first iter
-                    (or (= (car pos) (+ new 1))
-                        (= (car pos) (- new 1)))))
-           #f)
+          ((= (car pos) new) #f)
+          ((and (= k n)             ; check diagonals on first iter
+                (or (= (car pos) (+ new 1))
+                    (= (car pos) (- new 1)))) #f)
           (else
            (safe-iter new (- n 1) (cdr pos)))))
   (safe-iter (car pos) k (cdr pos)))
