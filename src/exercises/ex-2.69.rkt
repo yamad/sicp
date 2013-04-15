@@ -8,11 +8,11 @@
   (cond ((null? pairs) '())
         ((= (length pairs) 1) (car pairs))
         (else
-         (successive-merge
-          (cons
-           (make-code-tree (cadr pairs)
-                           (car pairs))
-           (cddr pairs))))))
+         (let ((new-node
+                (make-code-tree (cadr pairs)
+                                (car pairs)))
+               (rest (cddr pairs)))
+         (successive-merge (adjoin-set new-node rest))))))
 
 
 ;; helper functions

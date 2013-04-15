@@ -17,4 +17,5 @@
 lyrics-tree
 msg
 (encode msg lyrics-tree)
+(length (encode msg lyrics-tree)) ;; 84
 (decode (encode msg lyrics-tree) lyrics-tree)
