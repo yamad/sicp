@@ -1,0 +1,21 @@
+;; ex 2.77 -- trace of call stack for magnitude call
+(require "../examples/generic-arithmetic.rkt")
+(define z '(complex (rectangular (3 4))))
+(magnitude z)
+(apply-generic 'magnitude z)
+(let ((type-tags (map type-tag z)))
+  (let ((proc (get 'magnitude type-tags)))
+    (if proc
+        (apply proc (map contents z)))))
+(apply (get 'magnitude '(complex)) '(rectangular (3 4)))
+(magnitude '(rectangular (3 4)))
+(apply-generic 'magnitude '(rectangular (3 4)))
+(apply (get 'magnitude '(rectangular)) '(3 4))
+((lambda (z) (sqrt (+ (square (car z))
+                      (square (cdr z)))))
+ '(3 4))
+(sqrt (+ (square 3)
+         (square 4)))
+(sqrt (+ 9 16))
+(sqrt 25)
+5
