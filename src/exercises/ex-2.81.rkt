@@ -1,5 +1,43 @@
 #lang racket
 
+;; ex 2.81
+;;
+;; (a) apply-generic goes into an infinite recursion using Louis' code
+;; to call exp on two complex numbers, because the get-coercion call
+;; continually finds a coercion function (which does nothing).
+;;
+;; (b) No, apply-generic works correctly as is. If a function can
+;; apply to two arguments of the same type, this is handled by the
+;; primary branch (apply proc). If no function is found, then there is
+;; no entry in the coercion table and we fall through to the else
+;; condition of the innermost cond.
+;;
+;; (c) This version of apply-generic bypasses coercion attempts on
+;; data of the same type.
+(define (apply-generic op . args)
+  (define (no-method op type-tags)
+    (error "No method for these types"
+            (list op type-tags)))
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (if proc
+          (apply proc (map contents args))
+          (if (= (length args) 2)
+              (let ((type1 (car type-tags))
+                    (type2 (cadr type-tags))
+                    (a1 (car args))
+                    (a2 (cadr args)))
+                (if (equal? type1 type2)
+                    (no-method op type-tags)
+                    (let ((t1->t2 (get-coercion (list type1 type2)))
+                          (t2->t1 (get-coercion (list type2 type1))))
+                      (cond (t1->t2
+                             (apply-generic op (t1->t2 a1) a2))
+                            (t2->t1
+                             (apply-generic op a1 (t2->t1 a2)))
+                            (else (no-method op type-tags))))))
+              (no-method op type-tags))))))
+
 ;; return table with key-value pair removed by key
 (define (prune-key key table)
   (define (remove-kv key table)
@@ -40,28 +78,6 @@
   (let ((match (assoc type coercion-table)))
     (if match (cdr match)
         (error "get-coercion error: no entry for " type))))
-
-(define (apply-generic op . args)
-  (let ((type-tags (map type-tag args)))
-    (let ((proc (get op type-tags)))
-      (if proc
-          (apply proc (map contents args))
-          (if (= (length args) 2)
-              (let ((type1 (car type-tags))
-                    (type2 (cadr type-tags))
-                    (a1 (car args))
-                    (a2 (cadr args)))
-                (let ((t1->t2 (get-coercion (list type1 type2)))
-                      (t2->t1 (get-coercion (list type2 type1))))
-                  (cond (t1->t2
-                         (apply-generic op (t1->t2 a1) a2))
-                        (t2->t1
-                         (apply-generic op a1 (t2->t1 a2)))
-                        (else
-                         (error "No method for these types"
-                                (list op type-tags))))))
-              (error "No method for these types"
-                     (list op type-tags)))))))
 
 (define (attach-tag type-tag datum)
   (cond ((number? datum) datum)

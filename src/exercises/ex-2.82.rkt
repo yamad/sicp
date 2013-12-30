@@ -1,4 +1,65 @@
 #lang racket
+  (define (coerce-all type-to type-tags args)
+    (define (coerce-help type-tags args acc)
+      (cond ((null? args) acc)
+            ((equal? type-to (car type-tags))
+             (coerce-help (cdr type-tags) (cdr args) (cons (car args) acc)))
+            (else
+             (let ((coerce-proc (get-coercion (list (car type-tags) type-to))))
+               (if coerce-proc
+                   (coerce-help (cdr type-tags)
+                                (cdr args)
+                                (cons (coerce-proc (car args)) acc))
+                   acc)))))
+    (coerce-help type-tags args '()))
+  (define (get-full-coercion type-tags args)
+    (define (full-coerce-help type-try-list)
+      (if (null? type-try-list)
+          '()
+          (let ((coerced-args (coerce-all (car type-try-list)
+                                          type-tags args)))
+            (if (equal? (length args) (length coerced-args))
+                coerced-args
+                (full-coerce-help (cdr type-try-list))))))
+    (full-coerce-help type-tags))
+
+;; ex 2.82 -- handle multiple arguments in coercion
+(define (apply-generic op . args)
+  (define (no-method op type-tags)
+    (error "No method for these types"
+            (list op type-tags)))
+  ; returns list of coerced args to type `type-to` up to failure
+  (define (coerce-all type-to type-tags args)
+    (define (coerce-help type-tags args acc)
+      (cond ((null? args) acc)
+            ((equal? type-to (car type-tags))
+             (coerce-help (cdr type-tags) (cdr args) (cons (car args) acc)))
+            (else
+             (let ((coerce-proc (get-coercion (list (car type-tags) type-to))))
+               (if coerce-proc
+                   (coerce-help (cdr type-tags)
+                                (cdr args)
+                                (cons (coerce-proc (car args)) acc))
+                   acc)))))
+    (coerce-help type-tags args '()))
+  (define (get-full-coercion type-tags args)
+    (define (full-coerce-help type-try-list)
+      (if (null? type-try-list)
+          #f
+          (let ((coerced-args (coerce-all (car type-try-list)
+                                          type-tags args)))
+            (if (equal? (length args) (length coerced-args))
+                coerced-args
+                (full-coerce-help (cdr type-try-list))))))
+    (full-coerce-help type-tags))
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (if proc
+          (apply proc (map contents args))
+          (let ((coerced-args (get-full-coercion type-tags args)))
+            (if coerced-args
+                (apply apply-generic (cons op coerced-args))
+                (no-method op type-tags)))))))
 
 ;; return table with key-value pair removed by key
 (define (prune-key key table)
@@ -30,38 +91,19 @@
                          (prune-key key op-table)))))
 (define (get op type)
   (let ((match (assoc (make-key op type) op-table)))
-    (if match (cdr match)
-        (error "get error: no entry for " op type))))
+    (if match
+        (cdr match)
+        #f)))
 
 (define coercion-table '())
 (define (put-coercion type item)
-  (set! coercion-table (cons type item)))
+  (set! coercion-table (cons (cons type item)
+                             (prune-key type coercion-table))))
 (define (get-coercion type)
   (let ((match (assoc type coercion-table)))
-    (if match (cdr match)
-        (error "get-coercion error: no entry for " type))))
-
-(define (apply-generic op . args)
-  (let ((type-tags (map type-tag args)))
-    (let ((proc (get op type-tags)))
-      (if proc
-          (apply proc (map contents args))
-          (if (= (length args) 2)
-              (let ((type1 (car type-tags))
-                    (type2 (cadr type-tags))
-                    (a1 (car args))
-                    (a2 (cadr args)))
-                (let ((t1->t2 (get-coercion (list type1 type2)))
-                      (t2->t1 (get-coercion (list type2 type1))))
-                  (cond (t1->t2
-                         (apply-generic op (t1->t2 a1) a2))
-                        (t2->t1
-                         (apply-generic op a1 (t2->t1 a2)))
-                        (else
-                         (error "No method for these types"
-                                (list op type-tags))))))
-              (error "No method for these types"
-                     (list op type-tags)))))))
+    (if match
+        (cdr match)
+        #f)))
 
 (define (attach-tag type-tag datum)
   (cond ((number? datum) datum)
