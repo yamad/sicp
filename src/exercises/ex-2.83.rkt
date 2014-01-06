@@ -1,42 +1,42 @@
 #lang racket
 
-;; ex 2.81
-;;
-;; (a) apply-generic goes into an infinite recursion using Louis' code
-;; to call exp on two complex numbers, because the get-coercion call
-;; continually finds a coercion function (which does nothing).
-;;
-;; (b) No, apply-generic works correctly as is. If a function can
-;; apply to two arguments of the same type, this is handled by the
-;; primary branch (apply proc). If no function is found, then there is
-;; no entry in the coercion table and we fall through to the else
-;; condition of the innermost cond.
-;;
-;; (c) This version of apply-generic bypasses coercion attempts on
-;; data of the same type.
+;; ex 2.83 -- raise operations for numeric type heirarchy
 (define (apply-generic op . args)
   (define (no-method op type-tags)
     (error "No method for these types"
             (list op type-tags)))
+  ; returns list of coerced args to type `type-to` up to failure
+  (define (coerce-all type-to type-tags args)
+    (define (coerce-help type-tags args acc)
+      (cond ((null? args) acc)
+            ((equal? type-to (car type-tags))
+             (coerce-help (cdr type-tags) (cdr args) (cons (car args) acc)))
+            (else
+             (let ((coerce-proc (get-coercion (list (car type-tags) type-to))))
+               (if coerce-proc
+                   (coerce-help (cdr type-tags)
+                                (cdr args)
+                                (cons (coerce-proc (car args)) acc))
+                   acc)))))
+    (coerce-help type-tags args '()))
+  (define (get-full-coercion type-tags args)
+    (define (full-coerce-help type-try-list)
+      (if (null? type-try-list)
+          #f
+          (let ((coerced-args (coerce-all (car type-try-list)
+                                          type-tags args)))
+            (if (equal? (length args) (length coerced-args))
+                coerced-args
+                (full-coerce-help (cdr type-try-list))))))
+    (full-coerce-help type-tags))
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
       (if proc
           (apply proc (map contents args))
-          (if (= (length args) 2)
-              (let ((type1 (car type-tags))
-                    (type2 (cadr type-tags))
-                    (a1 (car args))
-                    (a2 (cadr args)))
-                (if (equal? type1 type2)
-                    (no-method op type-tags)
-                    (let ((t1->t2 (get-coercion (list type1 type2)))
-                          (t2->t1 (get-coercion (list type2 type1))))
-                      (cond (t1->t2
-                             (apply-generic op (t1->t2 a1) a2))
-                            (t2->t1
-                             (apply-generic op a1 (t2->t1 a2)))
-                            (else (no-method op type-tags))))))
-              (no-method op type-tags))))))
+          (let ((coerced-args (get-full-coercion type-tags args)))
+            (if coerced-args
+                (apply apply-generic (cons op coerced-args))
+                (no-method op type-tags)))))))
 
 ;; return table with key-value pair removed by key
 (define (prune-key key table)
@@ -68,16 +68,19 @@
                          (prune-key key op-table)))))
 (define (get op type)
   (let ((match (assoc (make-key op type) op-table)))
-    (if match (cdr match)
-        (error "get error: no entry for " op type))))
+    (if match
+        (cdr match)
+        #f)))
 
 (define coercion-table '())
 (define (put-coercion type item)
-  (set! coercion-table (cons type item)))
+  (set! coercion-table (cons (cons type item)
+                             (prune-key type coercion-table))))
 (define (get-coercion type)
   (let ((match (assoc type coercion-table)))
-    (if match (cdr match)
-        (error "get-coercion error: no entry for " type))))
+    (if match
+        (cdr match)
+        #f)))
 
 (define (attach-tag type-tag datum)
   (cond ((number? datum) datum)
@@ -97,6 +100,11 @@
 (define (square x) (* x x))
 (define (install-scheme-number-package)
   (define (tag x) x)
+  (define (integer->rational n)
+    (make-rational (contents n) 1))
+  (define (real->complex n)
+    (make-complex-from-real-imag
+     (contents n) 0))
   (put 'add '(scheme-number scheme-number)
        (lambda (x y) (tag (+ x y))))
   (put 'sub '(scheme-number scheme-number)
@@ -111,6 +119,11 @@
        (lambda (x y) (expt x y)))
   (put 'make '(scheme-number) (lambda (x) (tag x)))
   (put '=zero? '(scheme-number) (lambda (x) (equal? x 0)))
+  (put 'raise '(scheme-number)
+       (lambda (x)
+         (if (exact? (contents x))
+             (integer->rational x)
+             (real->complex x))))
   'done)
 
 (define (install-rational-package)
@@ -139,6 +152,9 @@
          (equal? (denom x) (denom y))))
   (define (=zero? z)
     (equal? (numer z) 0))
+  (define (rational->real n)
+    (make-scheme-number
+     (exact->inexact (/ (numer n) (denom n)))))
   (define (tag x) (attach-tag 'rational x))
   (put 'add '(rational rational)
         (lambda (x y) (tag (add-rat x y))))
@@ -152,6 +168,7 @@
   (put '=zero? '(rational) =zero?)
   (put 'make '(rational)
         (lambda (n d) (tag (make-rat n d))))
+  (put 'raise '(rational) (lambda (x) (rational->real x)))
   'done)
 
 (define (install-complex-package)
@@ -277,6 +294,7 @@
 (define (angle z) (apply-generic 'angle z))
 (define (equ? a b) (apply-generic 'equ? a b))
 (define (=zero? z) (apply-generic '=zero? z))
+(define (raise n) (apply-generic 'raise n))
 
 (define (scheme-number->complex n)
   (make-complex-from-real-imag (contents n) 0))

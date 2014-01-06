@@ -1,42 +1,33 @@
 #lang racket
+;; ex 2.84 -- use raise operations for numeric types
+(define LEVEL-INTEGER  1)
+(define LEVEL-RATIONAL 2)
+(define LEVEL-REAL     3)
+(define LEVEL-COMPLEX  4)
 
-;; ex 2.81
-;;
-;; (a) apply-generic goes into an infinite recursion using Louis' code
-;; to call exp on two complex numbers, because the get-coercion call
-;; continually finds a coercion function (which does nothing).
-;;
-;; (b) No, apply-generic works correctly as is. If a function can
-;; apply to two arguments of the same type, this is handled by the
-;; primary branch (apply proc). If no function is found, then there is
-;; no entry in the coercion table and we fall through to the else
-;; condition of the innermost cond.
-;;
-;; (c) This version of apply-generic bypasses coercion attempts on
-;; data of the same type.
 (define (apply-generic op . args)
   (define (no-method op type-tags)
     (error "No method for these types"
             (list op type-tags)))
+  (define (raise-lowest args)
+    (let ((min-type (apply min (map tower-level args))))
+      (define (build-list rem-args acc)
+        (cond ((null? rem-args) acc)
+              ((eq? min-type (tower-level (car rem-args)))
+               (build-list (cdr rem-args) (cons (raise (car rem-args)) acc)))
+              (else
+               (build-list (cdr rem-args) (cons (car rem-args) acc)))))
+      (if (eq? min-type LEVEL-COMPLEX)
+          args
+          (build-list args '()))))
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
       (if proc
           (apply proc (map contents args))
-          (if (= (length args) 2)
-              (let ((type1 (car type-tags))
-                    (type2 (cadr type-tags))
-                    (a1 (car args))
-                    (a2 (cadr args)))
-                (if (equal? type1 type2)
-                    (no-method op type-tags)
-                    (let ((t1->t2 (get-coercion (list type1 type2)))
-                          (t2->t1 (get-coercion (list type2 type1))))
-                      (cond (t1->t2
-                             (apply-generic op (t1->t2 a1) a2))
-                            (t2->t1
-                             (apply-generic op a1 (t2->t1 a2)))
-                            (else (no-method op type-tags))))))
-              (no-method op type-tags))))))
+          (let ((raised-args (raise-lowest args)))
+            (if raised-args
+                (apply apply-generic (cons op raised-args))
+                (no-method op type-tags)))))))
 
 ;; return table with key-value pair removed by key
 (define (prune-key key table)
@@ -68,16 +59,9 @@
                          (prune-key key op-table)))))
 (define (get op type)
   (let ((match (assoc (make-key op type) op-table)))
-    (if match (cdr match)
-        (error "get error: no entry for " op type))))
-
-(define coercion-table '())
-(define (put-coercion type item)
-  (set! coercion-table (cons type item)))
-(define (get-coercion type)
-  (let ((match (assoc type coercion-table)))
-    (if match (cdr match)
-        (error "get-coercion error: no entry for " type))))
+    (if match
+        (cdr match)
+        #f)))
 
 (define (attach-tag type-tag datum)
   (cond ((number? datum) datum)
@@ -97,6 +81,11 @@
 (define (square x) (* x x))
 (define (install-scheme-number-package)
   (define (tag x) x)
+  (define (integer->rational n)
+    (make-rational (contents n) 1))
+  (define (real->complex n)
+    (make-complex-from-real-imag
+     (contents n) 0))
   (put 'add '(scheme-number scheme-number)
        (lambda (x y) (tag (+ x y))))
   (put 'sub '(scheme-number scheme-number)
@@ -111,6 +100,16 @@
        (lambda (x y) (expt x y)))
   (put 'make '(scheme-number) (lambda (x) (tag x)))
   (put '=zero? '(scheme-number) (lambda (x) (equal? x 0)))
+  (put 'raise '(scheme-number)
+       (lambda (x)
+         (if (exact? (contents x))
+             (integer->rational x)
+             (real->complex x))))
+  (put 'tower-level '(scheme-number)
+       (lambda (x)
+         (if (exact? (contents x))
+             LEVEL-INTEGER
+             LEVEL-REAL)))
   'done)
 
 (define (install-rational-package)
@@ -139,6 +138,9 @@
          (equal? (denom x) (denom y))))
   (define (=zero? z)
     (equal? (numer z) 0))
+  (define (rational->real n)
+    (make-scheme-number
+     (exact->inexact (/ (numer n) (denom n)))))
   (define (tag x) (attach-tag 'rational x))
   (put 'add '(rational rational)
         (lambda (x y) (tag (add-rat x y))))
@@ -152,6 +154,8 @@
   (put '=zero? '(rational) =zero?)
   (put 'make '(rational)
         (lambda (n d) (tag (make-rat n d))))
+  (put 'raise '(rational) (lambda (x) (rational->real x)))
+  (put 'tower-level '(rational) (lambda (x) LEVEL-RATIONAL))
   'done)
 
 (define (install-complex-package)
@@ -193,6 +197,7 @@
   (put 'angle '(complex) angle)
   (put '=zero? '(complex) =zero?)
   (put 'equ? '(complex complex) equ?)
+  (put 'tower-level '(complex) (lambda (x) LEVEL-COMPLEX))
 
   (define (install-rectangular-package)
     (define (real-part z) (car z))
@@ -277,11 +282,14 @@
 (define (angle z) (apply-generic 'angle z))
 (define (equ? a b) (apply-generic 'equ? a b))
 (define (=zero? z) (apply-generic '=zero? z))
-
-(define (scheme-number->complex n)
-  (make-complex-from-real-imag (contents n) 0))
-(put-coercion '(scheme-number complex) scheme-number->complex)
+(define (raise n) (apply-generic 'raise n))
+(define (tower-level x) (apply-generic 'tower-level x))
 
 (install-scheme-number-package)
 (install-rational-package)
 (install-complex-package)
+
+(raise (raise (raise 4)))
+(equ? (make-complex-from-real-imag 4 0) 4.0)
+(equ? 2 (make-rational 2 1))
+(=zero? 4)

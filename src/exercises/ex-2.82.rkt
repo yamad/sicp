@@ -1,27 +1,4 @@
 #lang racket
-  (define (coerce-all type-to type-tags args)
-    (define (coerce-help type-tags args acc)
-      (cond ((null? args) acc)
-            ((equal? type-to (car type-tags))
-             (coerce-help (cdr type-tags) (cdr args) (cons (car args) acc)))
-            (else
-             (let ((coerce-proc (get-coercion (list (car type-tags) type-to))))
-               (if coerce-proc
-                   (coerce-help (cdr type-tags)
-                                (cdr args)
-                                (cons (coerce-proc (car args)) acc))
-                   acc)))))
-    (coerce-help type-tags args '()))
-  (define (get-full-coercion type-tags args)
-    (define (full-coerce-help type-try-list)
-      (if (null? type-try-list)
-          '()
-          (let ((coerced-args (coerce-all (car type-try-list)
-                                          type-tags args)))
-            (if (equal? (length args) (length coerced-args))
-                coerced-args
-                (full-coerce-help (cdr type-try-list))))))
-    (full-coerce-help type-tags))
 
 ;; ex 2.82 -- handle multiple arguments in coercion
 (define (apply-generic op . args)
@@ -135,8 +112,8 @@
        (lambda (x y) (equal? x y)))
   (put 'exp '(scheme-number scheme-number)
        (lambda (x y) (expt x y)))
-  (put 'make 'scheme-number (lambda (x) (tag x)))
-  (put '=zero? 'scheme-number (lambda (x) (equal? x 0)))
+  (put 'make '(scheme-number) (lambda (x) (tag x)))
+  (put '=zero? '(scheme-number) (lambda (x) (equal? x 0)))
   'done)
 
 (define (install-rational-package)
@@ -176,16 +153,16 @@
         (lambda (x y) (tag (div-rat x y))))
   (put 'equ? '(rational rational) equ?)
   (put '=zero? '(rational) =zero?)
-  (put 'make 'rational
+  (put 'make '(rational)
         (lambda (n d) (tag (make-rat n d))))
   'done)
 
 (define (install-complex-package)
   ;; imported procedures from rectangular and polar packages
   (define (make-from-real-imag x y)
-    ((get 'make-from-real-imag 'rectangular) x y))
+    ((get 'make-from-real-imag '(rectangular)) x y))
   (define (make-from-mag-ang r a)
-    ((get 'make-from-mag-ang 'polar) r a))
+    ((get 'make-from-mag-ang '(polar)) r a))
   ;; internal procedures
   (define (add-complex z1 z2)
     (make-from-real-imag (+ (real-part z1) (real-part z2))
@@ -209,9 +186,9 @@
         (lambda (z1 z2) (tag (mul-complex z1 z2))))
   (put 'div '(complex complex)
         (lambda (z1 z2) (tag (div-complex z1 z2))))
-  (put 'make-from-real-imag 'complex
+  (put 'make-from-real-imag '(complex)
         (lambda (x y) (tag (make-from-real-imag x y))))
-  (put 'make-from-mag-ang 'complex
+  (put 'make-from-mag-ang '(complex)
         (lambda (r a) (tag (make-from-mag-ang r a))))
   (put 'real-part '(complex) real-part)
   (put 'imag-part '(complex) imag-part)
@@ -244,9 +221,9 @@
     (put 'angle '(rectangular) angle)
     (put 'equ? '(rectangular rectangular) equ?)
     (put '=zero? '(rectangular) =zero?)
-    (put 'make-from-real-imag 'rectangular
+    (put 'make-from-real-imag '(rectangular)
          (lambda (x y) (tag (make-from-real-imag x y))))
-    (put 'make-from-mag-ang 'rectangular
+    (put 'make-from-mag-ang '(rectangular)
          (lambda (r a) (tag (make-from-mag-ang r a))))
     'done)
 
@@ -274,9 +251,9 @@
     (put 'angle '(polar) angle)
     (put 'equ? '(polar polar) equ?)
     (put '=zero? '(polar) =zero?)
-    (put 'make-from-real-imag 'polar
+    (put 'make-from-real-imag '(polar)
          (lambda (x y) (tag (make-from-real-imag x y))))
-    (put 'make-from-mag-ang 'polar
+    (put 'make-from-mag-ang '(polar)
          (lambda (r a) (tag (make-from-mag-ang r a))))
     'done)
   (install-polar-package)
@@ -284,13 +261,13 @@
   'done)
 
 (define (make-scheme-number n)
-  ((get 'make 'scheme-number) n))
+  ((get 'make '(scheme-number)) n))
 (define (make-rational n d)
-  ((get 'make 'rational) n d))
+  ((get 'make '(rational)) n d))
 (define (make-complex-from-real-imag x y)
-  ((get 'make-from-real-imag 'complex) x y))
+  ((get 'make-from-real-imag '(complex)) x y))
 (define (make-complex-from-mag-ang r a)
-  ((get 'make-from-mag-ang 'complex) r a))
+  ((get 'make-from-mag-ang '(complex)) r a))
 
 (define (add x y) (apply-generic 'add x y))
 (define (sub x y) (apply-generic 'sub x y))
