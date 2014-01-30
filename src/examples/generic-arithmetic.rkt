@@ -3,7 +3,7 @@
 
 @title{Generic arithmetic system}
 
-This is the generic arithmetic system from section 2.4 of SICP,
+This is the generic arithmetic system from section 2.5 of SICP,
 specified in a literate programming style using
 @link["http://racket-lang.org"]{Racket's} literate programming
 language @racket[scribble/lp]. This file can be run by a racket
@@ -28,6 +28,7 @@ such objects as an API.
 
 @chunk[<arithmetic-api>
 <external-constructors>
+<generic-selectors>
 <generic-operations>
 ]
 
@@ -45,23 +46,23 @@ following constructors are available:
   ((get 'make-from-mag-ang 'complex) r a))
 ]
 
-Similarly, the following operations are available. The system "does
+The following operations and selectors are available. The system "does
 the right thing" with different types of numbers when using these
-generic operators. The generality is acheived by calling the
-appropriate function via @racket[apply-generic].
+generic operators. This generality is acheived by calling the
+appropriate function via @racket[apply-generic]:
 
 @chunk[<generic-operations>
 (define (add x y) (apply-generic 'add x y))
 (define (sub x y) (apply-generic 'sub x y))
 (define (mul x y) (apply-generic 'mul x y))
 (define (div x y) (apply-generic 'div x y))
-(define (exp x y) (apply-generic 'exp x y))
+]
+
+@chunk[<generic-selectors>
 (define (real-part z) (apply-generic 'real-part z))
 (define (imag-part z) (apply-generic 'imag-part z))
 (define (magnitude z) (apply-generic 'magnitude z))
 (define (angle z) (apply-generic 'angle z))
-(define (equ? a b) (apply-generic 'equ? a b))
-(define (=zero? z) (apply-generic '=zero? z))
 ]
 
 @section{Function dispatch}
@@ -84,22 +85,9 @@ functions are registered with the system by the packages in the
     (let ((proc (get op type-tags)))
       (if proc
           (apply proc (map contents args))
-          (if (= (length args) 2)
-              (let ((type1 (car type-tags))
-                    (type2 (cadr type-tags))
-                    (a1 (car args))
-                    (a2 (cadr args)))
-                (let ((t1->t2 (get-coercion (list type1 type2)))
-                      (t2->t1 (get-coercion (list type2 type1))))
-                  (cond (t1->t2
-                         (apply-generic op (t1->t2 a1) a2))
-                        (t2->t1
-                         (apply-generic op a1 (t2->t1 a2)))
-                        (else
-                         (error "No method for these types"
-                                (list op type-tags))))))
-              (error "No method for these types"
-                     (list op type-tags)))))))
+          (error
+           "No method for these types -- APPLY-GENERIC"
+           (list op type-tags))))))
 ]
 
 Data within the system is tagged with its type. The following
@@ -133,13 +121,13 @@ Each numeric type has a package of functions which are installed into the global
 <scheme-number-package>
 <rational-number-package>
 <complex-number-package>
-<number-coercions>
 <install-number-packages>
 ]
 
 @chunk[<scheme-number-package>
 (define (install-scheme-number-package)
-  (define (tag x) x)
+  (define (tag x)
+    (attach-tag 'scheme-number x))
   (put 'add '(scheme-number scheme-number)
        (lambda (x y) (tag (+ x y))))
   (put 'sub '(scheme-number scheme-number)
@@ -148,12 +136,8 @@ Each numeric type has a package of functions which are installed into the global
        (lambda (x y) (tag (* x y))))
   (put 'div '(scheme-number scheme-number)
        (lambda (x y) (tag (/ x y))))
-  (put 'equ? '(scheme-number scheme-number)
-       (lambda (x y) (equal? x y)))
-  (put 'exp '(scheme-number scheme-number)
-       (lambda (x y) (expt x y)))
-  (put 'make 'scheme-number (lambda (x) (tag x)))
-  (put '=zero? 'scheme-number (lambda (x) (equal? x 0)))
+  (put 'make 'scheme-number
+       (lambda (x) (tag x)))
   )
 ]
 
@@ -179,11 +163,6 @@ Each numeric type has a package of functions which are installed into the global
   (define (div-rat x y)
     (make-rat (* (numer x) (denom y))
               (* (denom x) (numer y))))
-  (define (equ? x y)
-    (and (equal? (numer x) (numer y))
-         (equal? (denom x) (denom y))))
-  (define (=zero? z)
-    (equal? (numer z) 0))
 
   ;; interface to rest of system
   (define (tag x) (attach-tag 'rational x))
@@ -195,8 +174,6 @@ Each numeric type has a package of functions which are installed into the global
         (lambda (x y) (tag (mul-rat x y))))
   (put 'div '(rational rational)
         (lambda (x y) (tag (div-rat x y))))
-  (put 'equ? '(rational rational) equ?)
-  (put '=zero? '(rational) =zero?)
   (put 'make 'rational
         (lambda (n d) (tag (make-rat n d))))
   )
@@ -246,8 +223,6 @@ numbers respectively.
   (put 'imag-part '(complex) imag-part)
   (put 'magnitude '(complex) magnitude)
   (put 'angle '(complex) angle)
-  (put '=zero? '(complex) =zero?)
-  (put 'equ? '(complex complex) equ?)
 
   <complex-rectangular-package>
   <complex-polar-package>
@@ -267,12 +242,6 @@ numbers respectively.
                (square (imag-part z)))))
     (define (angle z)
       (atan (imag-part z) (real-part z)))
-    (define (equ? a b)
-      (and (equal? (real-part a) (real-part b))
-           (equal? (imag-part a) (imag-part b))))
-    (define (=zero? z)
-      (and (equal? (real-part z) 0)
-           (equal? (imag-part z) 0)))
     (define (make-from-mag-ang r a)
       (cons (* r (cos a)) (* r (sin a))))
 
@@ -282,8 +251,6 @@ numbers respectively.
     (put 'imag-part '(rectangular) imag-part)
     (put 'magnitude '(rectangular) magnitude)
     (put 'angle '(rectangular) angle)
-    (put 'equ? '(rectangular rectangular) equ?)
-    (put '=zero? '(rectangular) =zero?)
     (put 'make-from-real-imag 'rectangular
          (lambda (x y) (tag (make-from-real-imag x y))))
     (put 'make-from-mag-ang 'rectangular
@@ -301,12 +268,6 @@ numbers respectively.
       (* (magnitude z) (cos (angle z))))
     (define (imag-part z)
       (* (magnitude z) (sin (angle z))))
-    (define (equ? a b)
-      (and (equal? (magnitude a) (magnitude b))
-           (equal? (angle a) (angle b))))
-    (define (=zero? z)
-      (and (equal? (magnitude z) 0)
-           (equal? (angle z) 0)))
     (define (make-from-real-imag x y)
       (cons (sqrt (+ (square x) (square y)))
             (atan y x)))
@@ -317,8 +278,6 @@ numbers respectively.
     (put 'imag-part '(polar) imag-part)
     (put 'magnitude '(polar) magnitude)
     (put 'angle '(polar) angle)
-    (put 'equ? '(polar polar) equ?)
-    (put '=zero? '(polar) =zero?)
     (put 'make-from-real-imag 'polar
          (lambda (x y) (tag (make-from-real-imag x y))))
     (put 'make-from-mag-ang 'polar
@@ -332,12 +291,6 @@ numbers respectively.
 (install-complex-package)
 ]
 
-@chunk[<number-coercions>
-(define (scheme-number->complex n)
-  (make-complex-from-real-imag (contents n) 0))
-(put-coercion '(scheme-number complex) scheme-number->complex)
-]
-
 @section{Data-directed table framework}
 
 To support the data-directed design, we need a way to store the table
@@ -347,7 +300,6 @@ build a table storage framework ourselves to test our code.
 
 @chunk[<table-framework>
        <key-table-framework>
-       <coercion-table-framework>
        ]
 
 First, we define @racket[put] and @racket[get], which store and
@@ -384,19 +336,6 @@ with it.
   (list op type))
 ]
 
-A similar table holds the functions for coercion of arguments to
-different types.
-
-@chunk[<coercion-table-framework>
-(define coercion-table '())
-(define (put-coercion type item)
-  (set! coercion-table (cons type item)))
-(define (get-coercion type)
-  (let ((match (assoc type coercion-table)))
-    (if match (cdr match)
-        (error "get-coercion error: no entry for " type))))
-]
-
 @section{Miscellaneous}
 
 Some helper functions from previous chapters are needed to make
@@ -405,7 +344,6 @@ everything work.
 @chunk[<helper-fns>
 (define (square x) (* x x))
 ]
-
 
 @section{Tests}
 
@@ -424,17 +362,103 @@ everything work.
 
 (define cma-a (make-complex-from-mag-ang 1 2))
 (define cma-b (make-complex-from-mag-ang 2 4))
-
-(define add-tests
+(define all-tests
   (test-suite
-   "generic addition test"
-   (check-equal? 3 (add sn-a sn-b))
-   (check-equal? 3 (add sn-b sn-a))
-   (check-equal? (make-rational 11 12) (add rat-a rat-b))
-   (check-equal? (make-complex-from-real-imag 3 4)
-                 (add cri-a cri-b))
-   (check-equal? (make-complex-from-mag-ang 3 6)
-                 (add cma-a cma-b))
+   "All arithmetic system tests"
+   <tests-scheme-number>
+   <tests-rational>
+   <tests-complex-rectangular>
+   <tests-complex-polar>
    ))
-(run-tests add-tests)
+(run-tests all-tests)
+]
+
+@chunk[<tests-scheme-number>
+(test-suite
+ "scheme number generic operations test"
+ (let ((a (make-scheme-number 1))
+       (b (make-scheme-number 2))
+       (add-id (make-scheme-number 0))
+       (mul-id (make-scheme-number 1)))
+   (check-equal? (make-scheme-number 3) (add a b))
+   (check-equal? (add a b) (add b a))
+   (check-equal? a (add a add-id))
+
+   (check-equal? (make-scheme-number 2) (mul a b))
+   (check-equal? (mul a b) (mul b a))
+   (check-equal? (make-scheme-number 4) (mul b b))
+   (check-equal? a (mul a mul-id))
+
+   (check-equal? (make-scheme-number 1) (sub b a))
+   (check-equal? (make-scheme-number -1) (sub a b))
+
+   (check-equal? (make-scheme-number 2) (div b a))
+   ))
+]
+
+@chunk[<tests-rational>
+(test-suite
+ "rational number generic operations tests"
+ (let ((a (make-rational 1 4))
+       (b (make-rational 2 3))
+       (add-id (make-rational 0 1)))
+   (check-equal? (make-rational 11 12)
+                 (add a b))
+   (check-equal? (add a b) (add b a))
+   (check-equal? a (add a add-id))
+
+   (check-equal? (make-rational 2 12)
+                 (mul a b))
+   (check-equal? (mul a b) (mul b a))
+
+   (check-equal? (make-rational 5 12)
+                 (sub b a))
+   (check-equal? (make-rational -5 12)
+                 (sub a b))
+
+   (check-equal? (make-rational 3 8) (div a b))
+   (check-equal? (make-rational 8 3) (div b a))
+   ))
+]
+
+@chunk[<tests-complex-rectangular>
+(test-suite
+ "tests for complex rectangular basic ops"
+ (let ((a (make-complex-from-real-imag 1 1))
+       (b (make-complex-from-real-imag 2 3))
+       (add-id (make-complex-from-real-imag 0 0)))
+
+   (check-equal? 2 (real-part b))
+   (check-equal? 3 (imag-part b))
+   (check-= 1.414 (magnitude a) 1e-3)
+   (check-= 0.785 (angle a) 1e-3)
+
+   (check-equal? (make-complex-from-real-imag 3 4)
+                 (add a b))
+   (check-equal? (add a b) (add b a))
+   (check-equal? a (add a add-id))
+
+   (check-equal? (make-complex-from-real-imag 1 2)
+                 (sub b a))
+ ))
+]
+
+@chunk[<tests-complex-polar>
+(test-suite
+ "tests for complex polar basic ops"
+ (let ((a (make-complex-from-mag-ang 1 2))
+       (b (make-complex-from-mag-ang 2 4)))
+
+   (check-equal? 2 (magnitude b))
+   (check-equal? 4 (angle b))
+   (check-= -1.307 (real-part b) 1e-3)
+   (check-= -1.513 (imag-part b) 1e-3)
+
+   (check-equal? (make-complex-from-mag-ang 2 6)
+                 (mul a b))
+   (check-equal? (make-complex-from-mag-ang 4 8)
+                 (mul b b))
+   (check-equal? (make-complex-from-mag-ang 2 2)
+                 (div b a))
+ ))
 ]
