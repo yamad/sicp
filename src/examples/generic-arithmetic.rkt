@@ -410,5 +410,31 @@ everything work.
 @section{Tests}
 
 @chunk[<tests>
-(require racket/unit)
+(require rackunit)
+(require rackunit/text-ui)
+
+(define sn-a (make-scheme-number 1))
+(define sn-b (make-scheme-number 2))
+
+(define rat-a (make-rational 1 4))
+(define rat-b (make-rational 2 3))
+
+(define cri-a (make-complex-from-real-imag 1 1))
+(define cri-b (make-complex-from-real-imag 2 3))
+
+(define cma-a (make-complex-from-mag-ang 1 2))
+(define cma-b (make-complex-from-mag-ang 2 4))
+
+(define add-tests
+  (test-suite
+   "generic addition test"
+   (check-equal? 3 (add sn-a sn-b))
+   (check-equal? 3 (add sn-b sn-a))
+   (check-equal? (make-rational 11 12) (add rat-a rat-b))
+   (check-equal? (make-complex-from-real-imag 3 4)
+                 (add cri-a cri-b))
+   (check-equal? (make-complex-from-mag-ang 3 6)
+                 (add cma-a cma-b))
+   ))
+(run-tests add-tests)
 ]
