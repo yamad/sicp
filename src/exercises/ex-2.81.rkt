@@ -43,8 +43,6 @@ so that it bypasses coercion attempts on data of the same type.
               (no-method op type-tags))))))
 ]
 
-For reference, the old version of apply-generic is:
-
 @section{Supporting code}
 
 This is the generic arithmetic system from section 2.5 of SICP,
@@ -350,20 +348,19 @@ build a table storage framework ourselves to test our code.
 ]
 
 @chunk[<key-table-framework>
+;; return table with key-value pair removed by key
+(define (prune-key key table)
+  (define (remove-kv key table)
+    (cond ((null? table) table)
+          ((equal? key (caar table))
+           (cdr table))
+          (else
+           (cons (car table) (remove-kv key (cdr table))))))
+  (if (member key (map car table))
+      (remove-kv key table)
+      table))
+
 (define (put op type item)
-
-  ;; return table with key-value pair removed by key
-  (define (prune-key key table)
-    (define (remove-kv key table)
-      (cond ((null? table) table)
-            ((equal? key (caar table))
-             (cdr table))
-            (else
-             (cons (car table) (remove-kv key (cdr table))))))
-    (if (member key (map car table))
-        (remove-kv key table)
-        table))
-
   (let ((key (make-op-key op type)))
     (set! op-table (cons (cons key item)
                          (prune-key key op-table)))))
@@ -371,7 +368,7 @@ build a table storage framework ourselves to test our code.
 (define (get op type)
   (let ((match (assoc (make-op-key op type) op-table)))
     (if match (cdr match)
-        (error "get error: no entry for " op type))))
+        #f)))
 
 (define op-table '())
 (define (make-op-key op type)
@@ -381,11 +378,12 @@ build a table storage framework ourselves to test our code.
 @chunk[<coercion-table-framework>
 (define coercion-table '())
 (define (put-coercion type item)
-  (set! coercion-table (cons type item)))
+  (set! coercion-table (cons (cons type item)
+                             (prune-key type coercion-table))))
 (define (get-coercion type)
   (let ((match (assoc type coercion-table)))
     (if match (cdr match)
-        (error "get-coercion error: no entry for " type))))
+        #f)))
 ]
 
 @subsection{Miscellaneous}
@@ -433,6 +431,10 @@ everything work.
  "coercion tests"
  (check-equal? (make-complex-from-real-imag 2 0)
                (scheme-number->complex (make-scheme-number 2)))
+ (check-equal? (make-complex-from-real-imag 2 1)
+               (add sn-a rect-a))
+ (check-equal? (add sn-a rect-a)
+               (add rect-a sn-a))
  )
 ]
 
