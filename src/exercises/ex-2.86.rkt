@@ -368,6 +368,7 @@
 (equ? (make-complex-from-real-imag 4 0) 4)
 (equ? 2 (make-rational 2 1))
 (=zero? 4)
+(mul (make-complex-from-mag-ang 2 1) (make-complex-from-mag-ang 4 2))
 
 (drop 4)
 (drop 4.0)
