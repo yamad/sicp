@@ -2,7 +2,7 @@
 
 @title{Generic arithmetic system}
 
-@section{Exercise 2.84}
+@section{Exercise 2.85}
 
 First, we define the generic operation @racket[project] which pushes
 an object down the numeric heirarchy. An implementation is provided
