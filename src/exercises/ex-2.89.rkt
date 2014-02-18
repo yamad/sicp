@@ -2,218 +2,219 @@
 
 @title{Generic arithmetic system}
 
-@section{Exercise 2.87}
+@section{Exercise 2.89}
 
-@subsection{Ordered term lists}
+A dense representation for polynomial term lists has the benefit that
+we can represent the term list and an individual term of the list
+using the same representation.
 
-Implementing @racket[=zero?] for polynomials is easiest if the
-polynomial terms are ordered. A pruned and ordered term list is also
-useful in other ways, so we implement this first.
+An individual term is a list with all zero coefficients except for the
+head of the list, which holds the coefficient of interest. The order
+of the term is encoded by the length of the list.
 
-To enforce ordering, @racket[adjoin-term] works like an ordered set
-and adds a term in a sorted spot in the term list. It combines terms
-of the same order, rather than throwing them duplicates.
+@chunk[<dense-term-representation>
+(define (first-term term-list)
+  (make-term (order term-list)
+                   (car term-list)))
+(define (rest-terms term-list)
+  (cdr term-list))
 
-@chunk[<adjoin-term>
+(define (make-term order coeff)
+  (if (= order 0)
+      (list coeff)
+      (cons coeff (make-term (- order 1) 0))))
+
+(define (order term)
+  (- (length term) 1))
+(define (coeff term)
+  (car term))
+
+(define (the-empty-termlist) '())
+(define (empty-termlist? term-list) (null? term-list))
+
 (define (adjoin-term term term-list)
-  (if (null? term-list)
-      (list (make-term (order term) (coeff term))) ; ensures every
-                                                   ; term is in lowest
-                                                   ; terms
-      (let* ((t1 (first-term term-list))
-             (rest (rest-terms term-list))
-             (o1 (order t1))
-             (ot (order term)))
-        (cond ((=zero? (coeff term))
-               term-list)
-              ((= ot o1)
-               (cons (add-term-same-order term t1)
-                     rest))
-              ((> ot o1)
-               (cons term term-list))
-              (else
-               (cons t1
-                     (adjoin-term term rest)))))))
-(define (add-term-same-order t1 t2)
-  (make-term (order t1) (add (coeff t1) (coeff t2))))
+  (cond ((and (empty-termlist? term)
+              (empty-termlist? term-list))
+         (the-empty-termlist))
+        ((empty-termlist? term-list) term)
+        ((empty-termlist? term) term-list)
+        (else
+         (let ((o1 (order term))
+               (o2 (order term-list))
+               (t1 term)
+               (t2 term-list))
+           (cond ((> o1 o2)
+                  (cons (coeff t1)
+                        (adjoin-term (rest-terms t1) t2)))
+                 ((< o1 o2)
+                  (cons (coeff t2)
+                        (adjoin-term t1 (rest-terms t2))))
+                 (else
+                  (map add t1 t2)))))))
+
+(run-tests (test-suite
+            "tests for dense representation for polynomials"
+            (check-equal? '(1) (make-term 0 1))
+            (check-equal? '(1 0 0) (make-term 2 1))
+            (check-equal? '(0 0 0) (make-term 2 0))
+            (check-equal? '(2 0 0) (first-term '(2 1 0)))
+            (check-equal? '(1 0) (rest-terms '(2 1 0)))
+            (check-equal? 3 (order '(1 0 0 0)))
+            (check-equal? 1 (coeff '(1 0 0 0)))
+            (check-equal? '(2 1) (adjoin-term '(1 1) '(1 0)))
+            (check-equal? '(1 1) (adjoin-term '(1 1) '()))
+            (check-equal? '(1 1) (adjoin-term '() '(1 1)))
+            (check-equal? '(2 1 1) (adjoin-term '(2 0 0) '(1 1)))
+ ))
 ]
 
-So that term lists are guaranteed to be in order, we also adjust the
-polynomial constructor so that created polynomials (by users, for
-instance) have ordered term lists.
+Now the complex to polynomial conversion function has to be changed as
+well. This suggests that we could create generic make-term-list and
+make-term functions, but I hold off on that for now.
 
-@chunk[<make-poly>
-(define (make-poly variable term-list)
-  (cons variable (foldl adjoin-term '() term-list)))
-]
-
-@subsection{=zero?}
-
-Now we can implement @racket[=zero?] by simply checking if the first
-coefficient is zero.
-
-@chunk[<=zero?-polynomial>
-(put '=zero? '(polynomial)
-     (lambda (x) (zero-coeff-termlist? (term-list x))))
-(define (zero-coeff-termlist? term-list)
-  (cond ((null? term-list) #t)
-        ((=zero? (coeff (first-term term-list)))
-         (zero-coeff-termlist? (rest-terms term-list)))
-        (else #f)))
-]
-
-@chunk[<tests-zero?-polynomial>
- (check-true (=zero? (make-polynomial 'x '((0 0)))))
- (check-true (=zero? (make-polynomial 'x '((1 0)))))
- (check-false (=zero? (make-polynomial 'x '((0 1)))))
- (check-false (=zero? (make-polynomial 'x '((1 1)))))
-]
-
-@subsection{Installation/improving the polynomial package}
-
-I took this exercise as a challenge to fully integrate the polynomial
-package into the current state of the arithmetic system (as of
-exercise 2.86, with coercion and a larger set of generic operations).
-
-@subsubsection{Polynomial coercion}
-
-To really integrate the polynomial package, we need to integrate it
-into the numeric hierarchy.
-
-@chunk[<tower-level-constants>
-(define LEVEL-INTEGER  1)
-(define LEVEL-RATIONAL 2)
-(define LEVEL-REAL     3)
-(define LEVEL-COMPLEX  4)
-(define LEVEL-POLY     5)
-(define LEVEL-LOWEST   LEVEL-INTEGER)
-(define LEVEL-HIGHEST  LEVEL-POLY)
-<any-variable-constant>
-]
-
-@chunk[<tower-level-polynomial>
-(put 'tower-level '(polynomial) (lambda (x) LEVEL-POLY))
-]
-
-We can then implement raise and project operations.
-
-@chunk[<coerce-polynomial>
-(put 'project '(polynomial)
-     (lambda (x)
-       (if (empty-termlist? (term-list x))
-           (make-scheme-number 0)
-           (coeff (first-term (term-list x))))))
-(put 'raise '(polynomial)
-     (lambda (x) (tag x)))
-]
-
-The full coercion activity depends on an @racket[equ?] operator for
-polynomials.
-
-@chunk[<equ?-polynomial>
-(define (same-termlist? l1 l2)
-  (define (same-term? t1 t2)
-    (and (equal? (order t1) (order t2))
-         (equ? (coeff t1) (coeff t2))))
-  (cond ((and (null? l1) (null? l2)) #t)
-        ((or (null? l1) (null? l2)) #f)
-        ((same-term? (first-term l1) (first-term l2))
-         (same-termlist? (rest-terms l1) (rest-terms l2)))
-        (else #f)))
-
-(put 'equ? '(polynomial polynomial)
-     (lambda (p1 p2)
-       (and (same-variable? (variable p1) (variable p2))
-            (same-termlist? (term-list p1) (term-list p2)))))
-]
-
-There is one main difficulty here, which is that raising a number to a
-polynomial requires assigning a variable to the polynomial. However,
-if the number is constant, the variable does not matter. To represent
-this "doesn't matter" condition, we define a dummy variable constant
-@racket[ANY-VARIABLE].
-
-@chunk[<any-variable-constant>
-(define ANY-VARIABLE   'ANY-VARIABLE)
-]
-
-@chunk[<any-variable-polynomial>
-(define (zero-order-termlist? term-list)
-  (and (= 1 (length term-list))
-       (=zero? (order (first-term term-list)))))
-(define (any-variable? p)
-  (eq? (variable p) ANY-VARIABLE))
-(define (constant? p)
-  (and (any-variable? p) (zero-order-termlist? (term-list p))))
-]
-
-We can then use this framework to test whether two polynomials are in
-the same variable or otherwise "combinable".
-
-@chunk[<operate-polynomial>
-(define (operate? p1 p2)
-  (or (constant? p1) (constant? p2)
-      (same-variable? (variable p1) (variable p2))))
-
-(define (add-poly p1 p2)
-  (if (operate? p1 p2)
-      (make-poly (variable p1)
-                 (add-terms (term-list p1)
-                            (term-list p2)))
-      (error "Polys not in same var -- ADD-POLY"
-             (list p1 p2))))
-
-(define (mul-poly p1 p2)
-  (if (operate? p1 p2)
-      (make-poly (variable p1)
-                 (mul-terms (term-list p1)
-                            (term-list p2)))
-      (error "Polys not in same var -- MUL-POLY"
-             (list p1 p2))))
-]
-
-And, finally, we install the following raise function into the complex
-package:
-
-@chunk[<raise-complex>
+@chunk[<complex-poly>
 (define (complex->poly z)
-  (make-polynomial ANY-VARIABLE (list (list 0 (tag z)))))
+  (make-polynomial ANY-VARIABLE (list (tag z))))
 (put 'raise '(complex) (lambda (x) (complex->poly x)))
 ]
 
-@chunk[<tests-raise-polynomial>
-(check-equal? (make-polynomial 'y '((1 1)))
-              (raise (make-polynomial 'y '((1 1)))))
+A test of the dense addition exposed a bug in the add-poly and
+mul-poly functions that could build the new polynomial using the dummy
+indeterminate ANY-VARIABLE rather than the real indeterminate. Now, if
+either polynomial is an ANY-VARIABLE polynomial, then the new
+polynomial must use the indeterminate of the other operand.
+
+@chunk[<add-and-mul-poly>
+(define (op-poly f p1 p2 msg)
+  (if (operate? p1 p2)
+      (if (any-variable? p1)
+          (make-poly (variable p2)
+                     (f (term-list p1)
+                        (term-list p2)))
+          (make-poly (variable p1)
+                     (f (term-list p1)
+                        (term-list p2))))
+      (error msg (list p1 p2))))
+
+(define (add-poly p1 p2)
+  (op-poly add-terms p1 p2
+           "Polys not in same var -- ADD-POLY"))
+
+(define (mul-poly p1 p2)
+  (op-poly mul-terms p1 p2
+           "Polys not in same var -- MUL-POLY"))
 ]
 
-@chunk[<tests-project-polynomial>
-(check-equal? 3 (project (make-polynomial 'x '((0 3)))))
-(check-equal? (make-rational 2 3)
-              (project (make-polynomial 'x
-                                        (list (list 0 (make-rational 2 3))))))
+@racket[add-terms] works without changes, but is now identical in
+function to @racket[adjoin-term]. We just alias the function to do
+less overall work.
+
+@chunk[<add-terms>
+(define add-terms adjoin-term)
 ]
 
+@chunk[<tests-polynomial-dense>
+(test-suite
+ "tests for dense polynomial term list"
+ (check-equal? (make-polynomial 'x '(3 1))
+               (make-polynomial 'x '(3 1)))
 
-@subsubsection{Supporting code}
+ (check-equal? (make-polynomial 'x '(2 0 0 1 3))
+               (add (make-polynomial 'x '(1 0 0 0 1))
+                    (make-polynomial 'x '(1 0 0 1 2))))
+
+ (check-equal? (make-polynomial 'x '(1 2 1))
+               (mul (make-polynomial 'x '(1 1))
+                    (make-polynomial 'x '(1 1))))
+
+ (check-equal? (make-polynomial 'x '(1 2 1))
+               (square (make-polynomial 'x '(1 1))))
+
+ (check-equal? (make-polynomial 'x '(1 0 2))
+               (add (make-polynomial 'x '(1 0 0)) 2))
+
+ (let* ((a (make-polynomial 'x (list 2
+                                     (make-polynomial 'y '(1 1))
+                                     5)))
+        (b (make-polynomial 'x (list 0
+                                     2
+                                     1)))
+        (c (make-polynomial 'x (list 2
+                                     (make-polynomial 'y '(1 3))
+                                     6))))
+   (check-equal? c (add a b))
+   (check-equal? c (add b a)))
+
+ (let* ((a (make-polynomial 'x '( 4  0 2  0 1)))
+        (b (make-polynomial 'x '( 5  4 0  1 1)))
+        (c (make-polynomial 'x '(-1 -4 2 -1 0))))
+   (check-equal? c (sub a b))
+   (check-equal? (make-polynomial 'x '(4 0 2 0 0))
+                 (sub a 1)))
+
+ (check-equal? (make-polynomial 'x (list
+                                    (make-polynomial 'y '(-1 -1))
+                                    (make-rational -1 2)
+                                    -1))
+               (negate
+                (make-polynomial 'x
+                                 (list
+                                  (make-polynomial 'y '(1 1))
+                                  (make-rational 1 2)
+                                  1))))
+
+ (check-equal? (make-polynomial 'y '(1 0))
+               (raise (make-polynomial 'y '(1 0))))
+ (check-equal? 3 (project (make-polynomial 'x '(3))))
+ (check-equal? (make-rational 2 3)
+               (project (make-polynomial 'x
+                                         (list (make-rational 2 3)))))
+
+
+ (check-true (=zero? (make-polynomial 'x '(0))))
+ (check-true (=zero? (make-polynomial 'x '(0 0))))
+ (check-false (=zero? (make-polynomial 'x '(1))))
+ (check-false (=zero? (make-polynomial 'x '(1 0))))
+ (check-equal? LEVEL-POLY (tower-level (make-polynomial 'x '(1 0))))
+ )
+]
+
+@subsection{Polynomial package}
 
 @chunk[<make-polynomial>
 (define (make-polynomial var terms)
-  ((get 'make 'polynomial) var terms))
+  ((get 'make '(polynomial)) var terms))
 ]
 
 @chunk[<polynomial-package>
 (define (install-polynomial-package)
   ;; internal procedures
   ;; representation of poly
-  <make-poly>
+  (define (make-poly variable term-list)
+    (cons variable term-list))
   (define (variable p) (car p))
   (define (term-list p) (cdr p))
-  <variable-predicate>
 
-  <sparse-term-representation>
+  ;; from section 2.3.2
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1) (variable? v2) (eq? v1 v2)))
 
-  <any-variable-polynomial>
-  <operate-polynomial>
+  <dense-term-representation>
+
+  (define (zero-order-termlist? term-list)
+    (and (= 1 (length term-list))
+         (=zero? (order (first-term term-list)))))
+  (define (any-variable? p)
+    (eq? (variable p) ANY-VARIABLE))
+  (define (constant? p)
+    (and (any-variable? p) (zero-order-termlist? (term-list p))))
+
+  (define (operate? p1 p2)
+    (or (constant? p1) (constant? p2)
+        (same-variable? (variable p1) (variable p2))))
+
+  <add-and-mul-poly>
 
   <add-terms>
   <mul-terms>
@@ -224,25 +225,59 @@ package:
        (lambda (p1 p2) (tag (add-poly p1 p2))))
   (put 'mul '(polynomial polynomial)
        (lambda (p1 p2) (tag (mul-poly p1 p2))))
-  <=zero?-polynomial>
-  <tower-level-polynomial>
-  <coerce-polynomial>
-  <equ?-polynomial>
 
-  (put 'make 'polynomial
+  (put '=zero? '(polynomial)
+       (lambda (x) (zero-coeff-termlist? (term-list x))))
+  (define (zero-coeff-termlist? term-list)
+    (cond ((null? term-list) #t)
+          ((=zero? (coeff (first-term term-list)))
+           (zero-coeff-termlist? (rest-terms term-list)))
+          (else #f)))
+
+  (put 'tower-level '(polynomial) (lambda (x) LEVEL-POLY))
+
+  (put 'project '(polynomial)
+       (lambda (x)
+         (if (empty-termlist? (term-list x))
+             (make-scheme-number 0)
+             (coeff (first-term (term-list x))))))
+  (put 'raise '(polynomial)
+       (lambda (x) (tag x)))
+
+  (define (same-termlist? l1 l2)
+    (define (same-term? t1 t2)
+      (and (equal? (order t1) (order t2))
+           (equ? (coeff t1) (coeff t2))))
+    (cond ((and (null? l1) (null? l2)) #t)
+          ((or (null? l1) (null? l2)) #f)
+          ((same-term? (first-term l1) (first-term l2))
+           (same-termlist? (rest-terms l1) (rest-terms l2)))
+          (else #f)))
+  (put 'equ? '(polynomial polynomial)
+       (lambda (p1 p2)
+         (and (same-variable? (variable p1) (variable p2))
+              (same-termlist? (term-list p1) (term-list p2)))))
+
+  (define (negate-terms term-list)
+    (if (empty-termlist? term-list)
+        (the-empty-termlist)
+        (adjoin-term (make-term (order (first-term term-list))
+                                (negate (coeff (first-term term-list))))
+                     (negate-terms (rest-terms term-list)))))
+  (define (negate-poly p)
+    (make-poly (variable p) (negate-terms (term-list p))))
+  (put 'negate '(polynomial)
+       (lambda (x) (tag (negate-poly x))))
+
+  (put 'sub '(polynomial polynomial)
+     (lambda (p1 p2) (tag (add-poly p1 (negate-poly p2)))))
+
+  (put 'make '(polynomial)
        (lambda (var terms) (tag (make-poly var terms))))
-  'done)
+)
 ]
 
-The polynomial package needs these procedures from section 2.3.2
-
-@chunk[<variable-predicate>
-(define (variable? x) (symbol? x))
-(define (same-variable? v1 v2)
-  (and (variable? v1) (variable? v2) (eq? v1 v2)))
-]
-
-@chunk[<add-terms>
+@chunk[<add-terms-sparse>
 (define (add-terms L1 L2)
   (cond ((empty-termlist? L1) L2)
         ((empty-termlist? L2) L1)
@@ -274,13 +309,33 @@ The polynomial package needs these procedures from section 2.3.2
       (the-empty-termlist)
       (let ((t2 (first-term L)))
         (adjoin-term
-         (make-term (+ (order t1) (order t2))
+         (make-term (add (order t1) (order t2))
                     (mul (coeff t1) (coeff t2)))
          (mul-term-by-all-terms t1 (rest-terms L))))))
 ]
 
 @chunk[<sparse-term-representation>
-<adjoin-term>
+(define (adjoin-term term term-list)
+  (if (null? term-list)
+      (list (make-term (order term) (coeff term))) ; ensures every
+                                                   ; term is in lowest
+                                                   ; terms
+      (let* ((t1 (first-term term-list))
+             (rest (rest-terms term-list))
+             (o1 (order t1))
+             (ot (order term)))
+        (cond ((=zero? (coeff term))
+               term-list)
+              ((= ot o1)
+               (cons (add-term-same-order term t1)
+                     rest))
+              ((> ot o1)
+               (cons term term-list))
+              (else
+               (cons t1
+                     (adjoin-term term rest)))))))
+(define (add-term-same-order t1 t2)
+  (make-term (order t1) (add (coeff t1) (coeff t2))))
 
 (define (the-empty-termlist) '())
 (define (first-term term-list) (car term-list))
@@ -292,9 +347,9 @@ The polynomial package needs these procedures from section 2.3.2
 (define (coeff term) (cadr term))
 ]
 
-@chunk[<tests-polynomial>
+@chunk[<tests-polynomial-sparse>
 (test-suite
- "tests for ordered polynomial term list"
+ "tests for sparse polynomial term list"
  (check-equal? (make-polynomial 'x '((1 3) (0 1)))
                (make-polynomial 'x '((0 1) (1 2) (1 1))))
  (check-equal? (make-polynomial 'x '((4 2) (1 1) (0 3)))
@@ -313,8 +368,40 @@ The polynomial package needs these procedures from section 2.3.2
                                                               '((1 1) (0 3))))
                                      '(0 6)))))
    (check-equal? d (add b c)))
+
+ (let* ((a (make-polynomial 'x '((4 4) (2 2) (0 1))))
+        (b (make-polynomial 'x '((4 5) (3 4) (1 1) (0 1))))
+        (c (make-polynomial 'x '((4 -1) (3 -4) (2 2) (1 -1)))))
+   (check-equal? c (sub a b))
+   (check-equal? (make-polynomial 'x '((4 4) (2 2)))
+                 (sub a 1)))
+
  (check-equal? (make-polynomial 'x '((2 1) (1 2) (0 1)))
                (square (make-polynomial 'x '((1 1) (0 1)))))
+ (check-equal? (make-polynomial 'x (list (list 2 (make-polynomial
+                                                  'y '((1 -1) (0 -1))))
+                                         (list 1 (make-rational -1 2))
+                                         (list 0 -1)))
+               (negate
+                (make-polynomial 'x
+                                 (list (list 2 (make-polynomial
+                                                'y '((1 1) (0 1))))
+                                       (list 1 (make-rational 1 2))
+                                       (list 0 1)))))
+
+ (check-equal? (make-polynomial 'y '((1 1)))
+               (raise (make-polynomial 'y '((1 1)))))
+ (check-equal? 3 (project (make-polynomial 'x '((0 3)))))
+ (check-equal? (make-rational 2 3)
+               (project (make-polynomial 'x
+                                         (list (list 0 (make-rational 2 3))))))
+
+
+ (check-true (=zero? (make-polynomial 'x '((0 0)))))
+ (check-true (=zero? (make-polynomial 'x '((1 0)))))
+ (check-false (=zero? (make-polynomial 'x '((0 1)))))
+ (check-false (=zero? (make-polynomial 'x '((1 1)))))
+ (check-equal? LEVEL-POLY (tower-level (make-polynomial 'x '((1 1)))))
  )
 ]
 
@@ -336,7 +423,6 @@ The full system is composed as follows:
        <numbers-packages>
        <helper-fns>
        <tests>
-       (provide (all-defined-out))
 ]
 
 @subsection{External API}
@@ -372,6 +458,7 @@ The full system is composed as follows:
 (define (cosine n) (apply-generic 'cosine n))
 (define (arctan x y) (apply-generic 'arctan x y))
 (define (sqroot n) (apply-generic 'sqroot n))
+(define (negate n) (apply-generic 'negate n))
 
 (define (equ? a b) (apply-generic 'equ? a b))
 (define (=zero? a) (apply-generic '=zero? a))
@@ -386,7 +473,7 @@ The full system is composed as follows:
                 ((equ? (raise projected-n) n) (drop projected-n))
                 (else n)))
         n)))
-(define DROPPABLE '(add sub mul div sine cosine arctan sqroot))
+(define DROPPABLE '(add sub mul div sine cosine arctan sqroot negate))
 ]
 
 @chunk[<generic-selectors>
@@ -472,6 +559,17 @@ the global operations table.
 <install-number-packages>
 ]
 
+@chunk[<tower-level-constants>
+(define LEVEL-INTEGER  1)
+(define LEVEL-RATIONAL 2)
+(define LEVEL-REAL     3)
+(define LEVEL-COMPLEX  4)
+(define LEVEL-POLY     5)
+(define LEVEL-LOWEST   LEVEL-INTEGER)
+(define LEVEL-HIGHEST  LEVEL-POLY)
+(define ANY-VARIABLE   'ANY-VARIABLE)
+]
+
 @chunk[<scheme-number-package>
 (define (install-scheme-number-package)
   (define (tag x) x)
@@ -497,6 +595,8 @@ the global operations table.
        (lambda (x y) (tag (atan x y))))
   (put 'sqroot '(scheme-number)
        (lambda (x) (tag (sqrt x))))
+  (put 'negate '(scheme-number)
+       (lambda (x) (tag (- x))))
 
   ;; coercion and raise functions
   (define (integer->rational n)
@@ -579,6 +679,10 @@ the global operations table.
   (put 'sqroot '(rational)
        (lambda (x)
          (make-rational (sqrt (numer x)) (sqrt (denom x)))))
+  (put 'negate '(rational)
+     (lambda (x)
+       (tag (make-rat (negate (numer x))
+                      (denom x)))))
 
   ;; coercion functions
   (define (rational->real n)
@@ -649,7 +753,14 @@ the global operations table.
        (lambda (x) LEVEL-COMPLEX))
   (put 'project '(complex)
      (lambda (x) (make-scheme-number (real-part x))))
-  <raise-complex>
+
+  <complex-poly>
+
+  (define (negate-complex z)
+    (make-from-real-imag (negate (real-part z))
+                         (negate (imag-part z))))
+  (put 'negate '(complex)
+       (lambda (z) (tag (negate-complex z))))
 
   <complex-rectangular-package>
   <complex-polar-package>
@@ -802,7 +913,7 @@ everything work.
    <tests-rational>
    <tests-complex-rectangular>
    <tests-complex-polar>
-   <tests-polynomial>
+   <tests-polynomial-dense>
    <tests-equ?-op>
    <tests-zero?-op>
    <tests-coercions>
@@ -812,8 +923,25 @@ everything work.
    <tests-drop>
    <tests-internal-complex>
    <tests-trig>
+   <tests-negate>
    ))
 (run-tests all-tests)
+]
+
+@chunk[<tests-negate>
+(test-suite
+ "tests for negate generic operation"
+ (check-equal? -1 (negate (make-scheme-number 1)))
+ (check-equal? (make-rational -1 2) (negate (make-rational 1 2)))
+ (check-equal? (make-complex-from-real-imag -1 -1)
+               (negate
+                (make-complex-from-real-imag 1 1)))
+ (check-equal? (make-complex-from-real-imag
+                (make-rational -1 2) -3)
+               (negate
+                (make-complex-from-real-imag
+                 (make-rational 1 2) 3)))
+ )
 ]
 
 @chunk[<tests-trig>
@@ -861,7 +989,6 @@ everything work.
  (check-equal? 1 (project (make-scheme-number 1)))
  (check-equal? 2 (project (make-complex-from-mag-ang 2 0)))
  (check-equal? 2.0 (project (make-complex-from-real-imag 2.0 0)))
- <tests-project-polynomial>
  )
 ]
 
@@ -888,7 +1015,6 @@ everything work.
  (check-equal? LEVEL-REAL (tower-level 1.0))
  (check-equal? LEVEL-COMPLEX (tower-level (make-complex-from-mag-ang 1 1)))
  (check-equal? LEVEL-COMPLEX (tower-level (make-complex-from-real-imag 1 1)))
- (check-equal? LEVEL-POLY (tower-level (make-polynomial 'x '((1 1)))))
  )
 ]
 
@@ -907,7 +1033,6 @@ everything work.
                (raise (raise (make-scheme-number 2))))
  (check-equal? (make-complex-from-real-imag 2.0 0)
                (raise (raise (raise (make-scheme-number 2)))))
- <tests-raise-polynomial>
  )
 ]
 
@@ -958,8 +1083,6 @@ everything work.
  (check-true  (=zero? (make-complex-from-mag-ang 0 0)))
  (check-true  (=zero? (make-complex-from-mag-ang 0 100)))
  (check-false (=zero? (make-complex-from-mag-ang 1 0)))
-
- <tests-zero?-polynomial>
  )
 ]
 
