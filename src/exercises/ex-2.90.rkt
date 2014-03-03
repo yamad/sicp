@@ -32,16 +32,23 @@ treating terms as "sparse" terms (a pair of order and coefficient
 values), so that we only need to implement different operations on
 term lists.
 
-Another big implementation decision is where to put the tag to
-identify the type of term list (sparse or dense). By analogy to the
-complex package, the first intstinct is to put the tag directly after
-the numeric type tag (e.g. @racketblock['(polynomial sparse x (1 2) (0
+Another implementation decision is where to put the tag to identify
+the type of term list (sparse or dense). By analogy to the complex
+package, the first instinct is to put the tag directly after the
+numeric type tag (e.g. @racketblock['(polynomial sparse x (1 2) (0
 3))]). However, this forces the term list packages to care more about
 the overall polynomial rather than the specifics of handling term
 lists. So we opt to tag *just the term list* (e.g
 @racketblock['(polynomial x sparse (1 2) (0 3))]), which better
 reflects the notion that the term list is the only differentiating
 factor here.
+
+This is a re-implementation of this exercise. After getting to working
+code by putting too much in each individual term list representation,
+I decided to do it more cleanly. See the commit history for previous
+versions.
+
+@subsection{Framework}
 
 For the global scope, we have a designated constructor for each
 term-list type.
@@ -53,37 +60,19 @@ term-list type.
   ((get 'make-dense '(polynomial)) var terms))
 ]
 
-In the polynomial package, we install the term list representations like so:
+We then move to the polynomial package scope, and install the term
+list framework.
 
 @chunk[<generic-termlist-install>
-(define (make-dense-termlist term-list)
-  ((get 'make-termlist '(dense)) term-list))
-(define (make-sparse-termlist term-list)
-  ((get 'make-termlist '(sparse)) term-list))
-(put 'make-dense  '(polynomial)
-     (lambda (v tl) (tag (make-poly v (make-dense-termlist tl)))))
-(put 'make-sparse  '(polynomial)
-     (lambda (v tl) (tag (make-poly v (make-sparse-termlist tl)))))
+<polynomial-constructor-install>
+<termlist-constructors>
+<termlist-convert-constructors>
 
 <term-representation>
+(install-term-package)
 
-(define (first-term term-list)
-  (apply-generic 'first-term term-list))
-(define (rest-terms term-list)
-  (apply-generic 'rest-terms term-list))
-(define (adjoin-term term term-list)
-  ((apply-generic 'apply-adjoin-term term-list) term))
-(define (empty-termlist? term-list)
-  (apply-generic 'empty-termlist? term-list))
-(define (the-empty-termlist)
-  (apply-generic 'the-empty-termlist))
-(define (zero-order-termlist? term-list)
-  (apply-generic 'zero-order-termlist? term-list))
-(define (zero-coeff-termlist? tl)
-  (apply-generic 'zero-coeff-termlist? tl))
-(define (negate-terms tl)
-  (apply-generic 'negate-terms tl))
-
+<termlist-api>
+<generic-termlist-operations>
 <termlist-type-tower>
 <dense-term-representation>
 <sparse-term-representation>
@@ -91,130 +80,380 @@ In the polynomial package, we install the term list representations like so:
 (install-sparse-package)
 ]
 
-The representation of terms is identical in every scope, but it was
-far too much trouble to create a tagged type "term". It's *much* more
-straightforward to implement functions if you know they won't call out
-to an outside scope. So we define this chunk once and then use it
-three times. Gross, but it works...
+@subsection{Constructors}
+
+To finish the global polynomial constructors, we install constructor
+functions in the operations table.
+
+@chunk[<polynomial-constructor-install>
+(put 'make-dense  '(polynomial)
+     (lambda (v tl) (tag (make-poly v (make-dense-termlist tl)))))
+(put 'make-sparse  '(polynomial)
+     (lambda (v tl) (tag (make-poly v (make-sparse-termlist tl)))))
+]
+
+We also need constructors for the individual term list types--these
+constructors expect an argument that is already mostly correctly
+formatted (a list of integers for dense term lists and a list of pairs
+for sparse term lists).
+
+@chunk[<termlist-constructors>
+(define (make-dense-termlist term-list)
+  ((get 'make-termlist '(dense)) term-list))
+(define (make-sparse-termlist term-list)
+  ((get 'make-termlist '(sparse)) term-list))
+]
+
+@subsection{Term type}
+
+The representation of terms is identical in every scope, so we create a
+tagged type "term". (Introducing the term type is the major change
+that allows most duplicate code to rise out of the individual term
+list packages.)
 
 @chunk[<term-representation>
 (define (make-term order coeff)
-  (list order (drop coeff)))
-(define (order term) (car term))
-(define (coeff term) (cadr term))
+  ((get 'make '(term)) order coeff))
+(define (order term)
+  (apply-generic 'order term))
+(define (coeff term)
+  (apply-generic 'coeff term))
+
+(define (install-term-package)
+  (define (tag t) (attach-tag 'term t))
+  (define (make order coeff)
+    (list order (drop coeff)))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
+
+  (put 'make '(term) (lambda (o c) (tag (make o c))))
+  (put 'order '(term) (lambda (t) (order t)))
+  (put 'coeff '(term) (lambda (t) (coeff t)))
+  )
 ]
+
+The term type is used most importantly as an argument to
+@racket[adjoin-term], where a term must be provided as the first
+argument. This creates a slightly unusual case where we need to bind
+adjoin-term to the term list first so that the generic operation knows
+which term list representation to dispatch to. To deal with this, we
+curry the function application. We introduce
+@racket[apply-adjoin-term] which binds the term list and then returns
+a single-argument function that takes a term to add to the term list.
+
+@chunk[<adjoin-term-generic>
+(define (adjoin-term term term-list)
+  ((apply-generic 'apply-adjoin-term term-list) term))
+]
+
+@subsection{Coercion}
+
+We also use the term type to convert between different term list
+representations. The idea is that to, say, convert from dense to
+sparse, the dense package first converts the dense representation to
+an intermediate representations--a list of term types. Then, this list
+of terms is forwarded to a constructor in polynomial package that, in
+turn, forwards to the sparse package. This truly hides the term list
+implementations from each other, and allows free conversion between
+representations.
+
+@chunk[<termlist-convert-constructors>
+(define (make-sparse-list-from-terms list-of-terms)
+  ((get 'make-from-terms '(sparse)) list-of-terms))
+(define (make-dense-list-from-terms list-of-terms)
+  ((get 'make-from-terms '(dense)) list-of-terms))
+]
+
+@chunk[<dense-conversion>
+(define (make-from-coeffs coeff-list)
+  (strip-leading-zeros coeff-list))
+(define (make-from-terms raw-list)
+  (if (null? raw-list)
+      '()
+      (adjoin-term (car raw-list)
+                   (make-from-terms (cdr raw-list)))))
+(define (to-terms term-list)
+  (if (null? term-list) '()
+      (cons (first-term term-list)
+            (to-terms (rest-terms term-list)))))
+
+(define (dense->sparse term-list)
+  (make-sparse-list-from-terms (to-terms term-list)))
+
+(put 'raise '(dense) (lambda (tl) (dense->sparse tl)))
+(put 'make-from-terms '(dense) (lambda (tl) (tag (make-from-terms tl))))
+(put 'coerce '(dense sparse) (lambda (tl) (dense->sparse tl)))
+(put 'coerce '(dense dense) (lambda (tl) (tag tl)))
+]
+
+@chunk[<sparse-conversion>
+(define (sparse-term-to-term term)
+  (apply make-term term))
+(define (to-terms term-list)
+  (map sparse-term-to-term term-list))
+
+(define (make-from-terms raw-list)
+  (foldl adjoin-term '() raw-list))
+
+(define (sparse->dense term-list)
+  (make-dense-list-from-terms (to-terms term-list)))
+
+(put 'raise '(sparse) (lambda (tl) (tag tl)))
+(put 'make-from-terms '(sparse) (lambda (tl) (tag (make-from-terms tl))))
+(put 'coerce '(sparse dense) (lambda (tl) (sparse->dense tl)))
+(put 'coerce '(sparse sparse) (lambda (tl) (tag tl)))
+]
+
+We will use the @racket[coerce] function a little later. Stay tuned.
+
+@subsection{Generic operations and interface}
+
+The best change that results from defining a term type is that term
+list operations like @racket[add-terms] and @racket[mul-terms] work
+automatically in the polynomial package scope because they only use
+functions from the term-list interface.
+
+@chunk[<generic-termlist-operations>
+(define (add-terms La Lb)
+  (define (add-terms-internal L1 L2)
+    (cond ((empty-termlist? L1) L2)
+          ((empty-termlist? L2) L1)
+          (else
+           (let ((t1 (first-term L1)) (t2 (first-term L2)))
+             (cond ((> (order t1) (order t2))
+                    (adjoin-term
+                     t1 (add-terms-internal (rest-terms L1) L2)))
+                   ((< (order t1) (order t2))
+                    (adjoin-term
+                     t2 (add-terms-internal L1 (rest-terms L2))))
+                   (else
+                    (adjoin-term (make-term (order t1) (add (coeff t1)
+                                                            (coeff t2)))
+                                 (add-terms-internal (rest-terms L1)
+                                                     (rest-terms L2)))))))))
+  (canonical-form (add-terms-internal La Lb)))
+
+(define (mul-terms L1 L2)
+  (if (empty-termlist? L1)
+      (the-empty-termlist L1)
+      (add-terms (mul-term-by-all-terms (first-term L1) L2)
+                 (mul-terms (rest-terms L1) L2))))
+
+(define (mul-term-by-all-terms t1 L)
+  (if (empty-termlist? L)
+      (the-empty-termlist L)
+      (let ((t2 (first-term L)))
+        (adjoin-term
+         (make-term (add (order t1) (order t2))
+                    (mul (coeff t1) (coeff t2)))
+         (mul-term-by-all-terms t1 (rest-terms L))))))
+
+(define (negate-terms term-list)
+  (if (empty-termlist? term-list)
+      (the-empty-termlist term-list)
+      (adjoin-term (make-term (order (first-term term-list))
+                              (negate (coeff (first-term term-list))))
+                   (negate-terms (rest-terms term-list)))))
+]
+
+Each term list representation has to provide at least the following
+functions as an interface for everything to work. Note that
+@racket[the-empty-termlist] now takes an argument so that it knows
+which term list representation it is working
+with. @racket[canonical-form] ensures that the resulting term lists
+are well formed (e.g. no zero coefficients where they don't carry
+information)
+
+@chunk[<termlist-api>
+(define (first-term term-list)
+  (apply-generic 'first-term term-list))
+(define (rest-terms term-list)
+  (apply-generic 'rest-terms term-list))
+<adjoin-term-generic>
+(define (empty-termlist? term-list)
+  (apply-generic 'empty-termlist? term-list))
+(define (the-empty-termlist term-list)
+  (apply-generic 'the-empty-termlist term-list))
+(define (zero-order-termlist? term-list)
+  (apply-generic 'zero-order-termlist? term-list))
+(define (zero-coeff-termlist? tl)
+  (apply-generic 'zero-coeff-termlist? tl))
+(define (canonical-form tl)
+  (apply-generic 'canonical-form tl))
+]
+
+@subsection{Ordering polynomial variables}
+
+By installing @racket[add-terms] and the like in polynomial scope, it
+opens up the possiblity that the system would try to add (or multiply)
+a dense and a sparse polynomial together. This works ok, but then the
+type of the resulting polynomial is not well determined without a way
+to favor one representation over the other. This is especially an
+issue when the system upconverts a normal number to a polynomial with
+an unbound (ANY-VARIABLE) variable. We definitely don't want to force
+a certain term list representation from the system-created polynomial
+in that case.
+
+I decided the most sensible solution was to order the polynomials by
+variable in alphabetical order ("x" beats "xa" beats "y"). The term
+list representation for the "greatest" polynomial in the sort order is
+the one used in the result.
+
+@chunk[<polynomial-operations>
+  (define (compare-variables v1 v2)
+    (cond ((not v1) #f)
+          ((not v2) #t)
+          ((equal? v1 ANY-VARIABLE) #f)
+          ((equal? v2 ANY-VARIABLE) #t)
+          (else
+           (string<? (symbol->string v1)
+                     (symbol->string v2)))))
+  (define (highest-variable var-list)
+    (if (null? var-list)
+        #f
+        (let ((high-cdr (highest-variable (cdr var-list))))
+          (if (compare-variables (car var-list) high-cdr)
+              (car var-list)
+              high-cdr))))
+  (define (select-variable v1 v2)
+    (highest-variable (list v1 v2)))
+  (define (select-greater-poly p1 p2)
+    (let* ((v1 (variable p1))
+           (v2 (variable p2))
+           (high-var (select-variable v1 v2)))
+      (if (equal? v1 high-var) p1 p2)))
+  (define (select-termlist-type p1 p2)
+    (type-tag (term-list (select-greater-poly p1 p2))))
+
+  (define (coerce type tl)
+    (if (equal? type (type-tag tl))
+        tl
+        ((get 'coerce (list (type-tag tl) type)) (contents tl))))
+  (define (op-poly f p1 p2 msg)
+    (let ((final-type (select-termlist-type p1 p2)))
+      (if (operate? p1 p2)
+          (make-poly (select-variable (variable p1)
+                                      (variable p2))
+                     (f (coerce final-type (term-list p1))
+                        (coerce final-type (term-list p2))))
+          (error msg (list p1 p2)))))
+  (define (add-poly p1 p2)
+    (op-poly add-terms p1 p2
+             "Polys not in same var -- ADD-POLY"))
+  (define (mul-poly p1 p2)
+    (op-poly mul-terms p1 p2
+             "Polys not in same var -- MUL-POLY"))
+  (define (negate-poly p)
+    (make-poly (variable p) (negate-terms (term-list p))))
+]
+
+@subsection{Term list representations}
+
+Finally, the actual code and tests for the the dense and sparse term
+list representations.
 
 @chunk[<dense-term-representation>
 (define (install-dense-package)
   (define (tag term-list) (attach-tag 'dense term-list))
   (define (first-term term-list)
-    (make-term (order-termlist term-list)
+    (make-term (order-dense term-list)
                (car term-list)))
   (define (rest-terms term-list)
     (cdr term-list))
   (define (empty-termlist? term-list) (null? term-list))
-  (define (the-empty-termlist) '())
+  (define (the-empty-termlist term-list) '())
 
+  (define (order-dense term-list)
+    (- (length term-list) 1))
+  (define (coeff-dense term-list)
+    (car term-list))
+
+  (define (strip-leading-zeros term-list)
+    (cond ((null? term-list) '())
+          ((=zero? (coeff-dense term-list))
+           (strip-leading-zeros (rest-terms term-list)))
+          (else
+           term-list)))
+
+  (define (adjoin-term term term-list)
+    (define (adjoin term term-list)
+      (cond ((and (empty-termlist? term-list)
+                  (null? term))
+             (the-empty-termlist term-list))
+            ((null? term) term-list)
+            ((empty-termlist? term-list)
+             (if (=zero? (coeff term))
+                 (the-empty-termlist term-list)
+                 (expand-term-to-list term)))
+            (else
+             (let ((o1 (order term))
+                   (o2 (order-dense term-list))
+                   (c1 (coeff term))
+                   (c2 (coeff (first-term term-list))))
+               (cond ((< o1 o2)
+                      (cons c2 (adjoin term (rest-terms term-list))))
+                     ((> o1 o2)
+                      (cons c1 (adjoin (make-term (- o1 1) 0)
+                                       term-list)))
+                     (else
+                      (map add (expand-term-to-list term)
+                           term-list)))))))
+    (strip-leading-zeros (adjoin term term-list)))
   (define (expand-term-to-list term)
     (if (= (order term) 0)
         (list (coeff term))
         (cons (coeff term)
               (expand-term-to-list (make-term (- (order term) 1) 0)))))
-  (define (order-termlist term-list)
-    (- (length term-list) 1))
 
-  (define (adjoin-term term term-list)
-    (cond ((and (empty-termlist? term-list)
-                (null? term))
-           (the-empty-termlist))
-          ((null? term) term-list)
-          ((empty-termlist? term-list)
-           (expand-term-to-list term))
-          (else
-           (let ((o1 (order term))
-                 (o2 (order-termlist term-list))
-                 (c1 (coeff term))
-                 (c2 (coeff (first-term term-list))))
-             (cond ((< o1 o2)
-                    (cons c2 (adjoin-term term (rest-terms term-list))))
-                   ((> o1 o2)
-                    (cons c1 (adjoin-term (make-term (- o1 1) 0)
-                                          term-list)))
-                   (else
-                    (map add (expand-term-to-list term)
-                         term-list)))))))
+  (define (all-zero-coeff? term-list)
+    (=zero? (foldl add 0 term-list)))
+  (define (zero-order-list? L)
+    (and (= 1 (length L))
+         (=zero? (order (first-term L)))))
 
-  (define (dense->sparse term-list)
-    (define (iter list acc)
-      (if (null? list) acc
-          (let ((term (first-term list)))
-            (cond ((= (coeff term) 0)
-                   (iter (rest-terms list) acc))
-                  (else
-                   (iter (rest-terms list)
-                         (cons term acc)))))))
-    (reverse (iter term-list '())))
-
-  (put 'make-termlist   '(dense) (lambda (tl) (tag tl)))
+  (put 'make-termlist   '(dense) (lambda (tl) (tag (make-from-coeffs tl))))
   (put 'first-term      '(dense) (lambda (tl) (first-term tl)))
   (put 'rest-terms      '(dense) (lambda (tl) (tag (rest-terms tl))))
   (put 'empty-termlist? '(dense) (lambda (tl) (empty-termlist? tl)))
-  (put 'the-empty-termlist '(dense) (lambda (tl) (tag (the-empty-termlist))))
+  (put 'the-empty-termlist '(dense) (lambda (tl) (tag (the-empty-termlist tl))))
   (put 'apply-adjoin-term '(dense) (lambda (tl)
                                      (lambda (t)
                                        (tag (adjoin-term t tl)))))
-  (put 'raise '(dense) (lambda (tl) (make-sparse-termlist (dense->sparse tl))))
-  <tower-level-dense>
-
-  <mul-terms>
-  <negate-terms>
-
-  (define (add-terms L1 L2)
-    (cond ((empty-termlist? L1) L2)
-          ((empty-termlist? L2) L1)
-          (else
-           (let* ((t1 (first-term L1))
-                  (t2 (first-term L2)))
-             (cond ((> (order t1) (order t2))
-                    (cons (coeff t1)
-                          (add-terms (rest-terms L1) L2)))
-                   ((< (order t1) (order t2))
-                    (cons (coeff t2)
-                          (add-terms L1 (rest-terms L2))))
-                   (else
-                    (map add L1 L2)))))))
-  (put 'add-terms '(dense dense) (lambda (tl1 tl2)
-                                   (tag (add-terms tl1 tl2))))
-  (put 'mul-terms '(dense dense) (lambda (tl1 tl2)
-                                   (tag (mul-terms tl1 tl2))))
-  (put 'negate-terms '(dense) (lambda (tl)
-                                (tag (negate-terms tl))))
-
-  <zero-coeff-termlist?>
   (put 'zero-coeff-termlist? '(dense) (lambda (tl)
-                                        (zero-coeff-termlist? tl)))
-  <zero-order-termlist?>
+                                        (all-zero-coeff? tl)))
   (put 'zero-order-termlist? '(dense) (lambda (tl)
-                                        (zero-order-termlist? tl)))
+                                        (zero-order-list? tl)))
+  (put 'canonical-form  '(dense) (lambda (tl) (tag (strip-leading-zeros tl))))
+
+  <dense-conversion>
+  <tower-level-dense>
 
   (define tests
     (test-suite
      "tests for dense representation for polynomials"
-     (check-equal? '(2 2) (first-term '(2 1 0)))
+     (check-equal? '(term 2 2) (first-term '(2 1 0)))
      (check-equal? '(1 0) (rest-terms '(2 1 0)))
-     (check-equal? '(3 1) (adjoin-term '(1 2) '(1 1)))
-     (check-equal? '(1 0) (adjoin-term '(1 1) '()))
-     (check-equal? '(1 1) (adjoin-term '() '(1 1)))
-     (check-equal? '(2 1 1) (adjoin-term '(2 2) '(1 1)))
-     (check-equal? '(5 3 1) (add-terms '(3 2 1) '(2 1 0)))
-     (check-equal? '(3 4 2) (add-terms '(3 2 1) '(2 1)))
-     (check-equal? '(4 2) (mul-terms '(2) '(2 1)))
-     (check-equal? '(1 2 1) (mul-terms '(1 1) '(1 1)))
-     (check-equal? '(-2 -1 0) (negate-terms '(2 1 0)))
-     (check-true (zero-coeff-termlist? '(0)))
-     (check-true (zero-coeff-termlist? '(0 0 0)))
-     (check-equal? '(2 0 0) (expand-term-to-list '(2 2)))
-     (check-equal? '((2 2) (0 1)) (dense->sparse '(2 0 1)))
+     (check-equal? '(3 1) (adjoin-term '(term 1 2) '(1 1)))
+     (check-equal? '(1 0) (adjoin-term '(term 1 1) '()))
+     (check-equal? '(2 1 1) (adjoin-term '(term 2 2) '(1 1)))
+     (check-equal? '() (adjoin-term '(term 2 0) '()))
+     (check-equal? '(3 0) (adjoin-term '(term 1 1) '(0 0 2 0)))
+     (check-equal? '(1 0) (adjoin-term '(term 3 -3) '(3 0 1 0)))
+     (check-equal? '(5 0 0 0 1 0) (adjoin-term '(term 3 -3) '(5 0 3 0 1 0)))
+     (check-equal? '(1 0) (make-from-coeffs '(0 0 1 0)))
+     (check-equal? '(dense 5 3 1) (add-terms '(dense 3 2 1) '(dense 2 1 0)))
+     (check-equal? '(dense 3 4 2) (add-terms '(dense 3 2 1) '(dense 2 1)))
+     (check-equal? '(dense 4 2) (mul-terms '(dense 2) '(dense 2 1)))
+     (check-equal? '(dense 1 2 1) (mul-terms '(dense 1 1) '(dense 1 1)))
+     (check-equal? '(dense -2 -1 0) (negate-terms '(dense 2 1 0)))
+     (check-true (all-zero-coeff? '(0)))
+     (check-true (all-zero-coeff? '(0 0)))
+     (check-true (all-zero-coeff? (list 0 (make-rational 0 1))))
+     (check-true (all-zero-coeff? (list (make-complex-from-real-imag 0 0)
+                                        (make-rational 0 1))))
+     (check-equal? '(2 0 0) (expand-term-to-list '(term 2 2)))
+     (check-equal? '(2 0 1) (make-from-terms '((term 2 2) (term 0 1))))
+     (check-equal? '((term 2 2) (term 1 0) (term 0 1)) (to-terms '(2 0 1)))
      ))
   (run-tests tests)
   )
@@ -225,7 +464,7 @@ three times. Gross, but it works...
   (define (tag p) (attach-tag 'sparse p))
   (define (adjoin-term term term-list)
     (if (null? term-list)
-        (list (apply make-term term))
+        (list (contents term))
         (let* ((t1 (first-term term-list))
                (rest (rest-terms term-list))
                (o1 (order t1))
@@ -235,91 +474,87 @@ three times. Gross, but it works...
                 ((= ot o1)
                  (cons (add-term-same-order term t1) rest))
                 ((> ot o1)
-                 (cons term term-list))
+                 (cons (contents term) term-list))
                 (else
-                 (cons t1
+                 (cons (contents t1)
                        (adjoin-term term rest)))))))
+
   (define (add-term-same-order t1 t2)
-    (make-term (order t1) (add (coeff t1) (coeff t2))))
+    (make-term-sparse (order t1) (add (coeff t1) (coeff t2))))
 
   (define (first-term term-list) (apply make-term (car term-list)))
   (define (rest-terms term-list) (cdr term-list))
   (define (empty-termlist? term-list) (null? term-list))
-  (define (the-empty-termlist) '())
+  (define (the-empty-termlist term-list) '())
+  (define (zero-coeff-termlist? term-list)
+    (if (null? term-list)
+        #t
+        (andmap =zero? (map coeff-sparse term-list))))
+  (define (zero-order-termlist? term-list)
+    (and (= 1 (length term-list))
+         (=zero? (order (first-term term-list)))))
 
-  (put 'make-termlist   '(sparse) (lambda (tl) (tag (foldl adjoin-term '() tl))))
+  (define (make-term-sparse order coeff)
+    (list order coeff))
+  (define (order-sparse t)
+    (car t))
+  (define (coeff-sparse t)
+    (cadr t))
+
+  (define (strip-zeros term-list)
+    (cond ((null? term-list) '())
+          ((=zero? (coeff-sparse (car term-list)))
+           (strip-zeros (cdr term-list)))
+          (else
+           (cons (car term-list) (strip-zeros (cdr term-list))))))
+  (define (canonical-form term-list)
+    (make-from-terms (to-terms (strip-zeros term-list))))
+
+  (put 'canonical-form  '(sparse) (lambda (tl) (tag (canonical-form tl))))
+  (put 'make-termlist   '(sparse) (lambda (tl) (tag (canonical-form tl))))
   (put 'first-term      '(sparse) (lambda (tl) (first-term tl)))
   (put 'rest-terms      '(sparse) (lambda (tl) (tag (rest-terms tl))))
   (put 'empty-termlist? '(sparse) (lambda (tl) (empty-termlist? tl)))
-  (put 'the-empty-termlist '(sparse) (lambda (tl) (tag (the-empty-termlist))))
+  (put 'the-empty-termlist '(sparse) (lambda (tl) (tag (the-empty-termlist tl))))
   (put 'apply-adjoin-term '(sparse) (lambda (tl)
                                       (lambda (t)
-                                        (adjoin-term t tl))))
-
-  <mul-terms>
-  <negate-terms>
-
-  (define (add-terms L1 L2)
-    (cond ((empty-termlist? L1) L2)
-          ((empty-termlist? L2) L1)
-          (else
-           (let ((t1 (first-term L1)) (t2 (first-term L2)))
-             (cond ((> (order t1) (order t2))
-                    (adjoin-term
-                     t1 (add-terms (rest-terms L1) L2)))
-                   ((< (order t1) (order t2))
-                    (adjoin-term
-                     t2 (add-terms L1 (rest-terms L2))))
-                   (else
-                    (let ((new-coeff (add (coeff t1) (coeff t2))))
-                      (if (=zero? new-coeff)
-                          (add-terms (rest-terms L1) (rest-terms L2))
-                          (adjoin-term (make-term (order t1) new-coeff)
-                                       (add-terms (rest-terms L1)
-                                                  (rest-terms L2)))))))))))
-  (put 'add-terms '(sparse sparse) (lambda (tl1 tl2)
-                                     (tag (add-terms tl1 tl2))))
-  (put 'mul-terms '(sparse sparse) (lambda (tl1 tl2)
-                                     (tag (mul-terms tl1 tl2))))
-  (put 'negate-terms '(sparse) (lambda (tl)
-                                 (tag (negate-terms tl))))
-
-  <zero-coeff-termlist?>
+                                        (tag (adjoin-term t tl)))))
   (put 'zero-coeff-termlist? '(sparse) (lambda (tl)
                                         (zero-coeff-termlist? tl)))
-  <zero-order-termlist?>
   (put 'zero-order-termlist? '(sparse) (lambda (tl)
-                                        (zero-order-termlist? tl)))
-
+                                         (zero-order-termlist? tl)))
   (put 'equ? '(sparse sparse) (lambda (tl1 tl2)
-                                (and (equal? (map order tl1) (map order tl2))
-                                     (equal? (map coeff tl1) (map coeff tl2)))))
-  (put 'raise '(sparse) (lambda (tl) (tag tl)))
+                                (and (equal? (map order-sparse tl1)
+                                             (map order-sparse tl2))
+                                     (equal? (map coeff-sparse tl1)
+                                             (map coeff-sparse tl2)))))
+  <sparse-conversion>
   <tower-level-sparse>
 
   (define tests
     (test-suite
      "tests for sparse representation for polynomials"
-     (check-equal? '(2 2) (first-term '((2 2) (1 1) (0 0))))
+     (check-equal? '(term 2 2) (first-term '((2 2) (1 1) (0 0))))
      (check-equal? '((1 1) (0 0)) (rest-terms '((2 2) (1 1) (0 0))))
-     (check-equal? '((1 3) (0 1)) (adjoin-term '(1 2) '((1 1) (0 1))))
-     (check-equal? '((1 1)) (adjoin-term '(1 1) '()))
-     (check-equal? '((2 2) (1 1) (0 1)) (adjoin-term '(2 2) '((1 1) (0 1))))
-     (check-equal? '((2 5) (1 3) (0 1)) (add-terms '((2 3) (1 2) (0 1))
-                                                   '((2 2) (1 1) (0 0))))
-     (check-equal? '((2 3) (1 4) (0 2)) (add-terms '((2 3) (1 2) (0 1))
-                                                   '((1 2) (0 1))))
-     (check-equal? '((1 4) (0 2)) (mul-terms '((0 2)) '((1 2) (0 1))))
-     (check-equal? '((2 1) (1 2) (0 1)) (mul-terms '((1 1) (0 1))
-                                                   '((1 1) (0 1))))
-     (check-equal? '((2 -2) (1 -1) (0 0)) (negate-terms '((2 2) (1 1) (0 0))))
+     (check-equal? '((1 3) (0 1)) (adjoin-term (make-term 1 2) '((1 1) (0 1))))
+     (check-equal? '((1 1)) (adjoin-term (make-term 1 1) '()))
+     (check-equal? '((2 2) (1 1) (0 1)) (adjoin-term (make-term 2 2) '((1 1) (0 1))))
+     (check-equal? '((term 2 2) (term 1 1) (term 0 1)) (to-terms '((2 2) (1 1) (0 1))))
+     (check-equal? '(sparse (2 5) (1 3) (0 1)) (add-terms '(sparse (2 3) (1 2) (0 1))
+                                                   '(sparse (2 2) (1 1) (0 0))))
+     (check-equal? '(sparse (2 3) (1 4) (0 2)) (add-terms '(sparse (2 3) (1 2) (0 1))
+                                                          '(sparse (1 2) (0 1))))
+     (check-equal? '(sparse (1 4) (0 2)) (mul-terms '(sparse (0 2)) '(sparse (1 2) (0 1))))
+     (check-equal? '(sparse (2 1) (1 2) (0 1)) (mul-terms '(sparse (1 1) (0 1))
+                                                          '(sparse (1 1) (0 1))))
+     (check-equal? '(sparse (2 -2) (1 -1) (0 0)) (negate-terms '(sparse (2 2) (1 1) (0 0))))
      (check-true (zero-coeff-termlist? '((0 0))))
      (check-true (zero-coeff-termlist? '((100 0) (10 0) (1 0))))
      (check-true (equ? '(sparse (3 1) (2 1) (0 1)) '(sparse (3 1) (2 1) (0 1))))
-     (check-true (equ? '(dense 1 0 1) '(sparse (2 1) (0 1))))
      (check-false (equ? '(sparse (3 1) (2 1) (0 1)) '(sparse (2 1) (0 1))))
-     (check-equal? '((1 1)) (adjoin-term '(0 0) '((1 1))))
-     (check-equal? '() (add-terms '((1 1)) '((1 -1))))
+     (check-equal? '((1 1)) (adjoin-term '(term 0 0) '((1 1))))
+     (check-equal? '(sparse) (add-terms '(sparse (1 1)) '(sparse (1 -1))))
+     (check-equal? '((term 2 1) (term 1 1) (term 0 1)) (to-terms '((2 1) (1 1) (0 1))))
      ))
   (run-tests tests)
   )
@@ -485,9 +720,13 @@ functions!
 
  (check-equal? (make-polynomial-dense 'x '(1 0 2))
                (add (make-polynomial-dense 'x '(1 0 0)) 2))
- (check-equal? (make-polynomial-sparse 'x '((2 1) (0 2)))
-               (add (make-polynomial-dense 'x '(1 0 0))
-                    (make-polynomial-sparse 'x '((0 2)))))
+
+ (let ((a (make-polynomial-dense 'x '(1 0 0)))
+       (b (make-polynomial-sparse 'x '((2 1) (0 2)))))
+   (check-equal? (make-polynomial-dense 'x '(2 0 2))
+                 (add a b))
+   (check-equal? (make-polynomial-sparse 'x '((2 2) (0 2)))
+                 (add b a)))
 
  (let* ((a (make-polynomial-dense 'x (list 2
                                      (make-polynomial-dense 'y '(1 1))
@@ -611,30 +850,13 @@ functions!
   (define (any-variable? p)
     (eq? (variable p) ANY-VARIABLE))
   (define (constant? p)
-    (and (any-variable? p) (zero-order-termlist? (term-list p))))
+    (zero-order-termlist? (term-list p)))
   (define (operate? p1 p2)
-    (or (constant? p1) (constant? p2)
+    (or (any-variable? p1) (any-variable? p2)
+        (constant? p1) (constant? p2)
         (same-variable? (variable p1) (variable p2))))
 
-  (define (op-poly f p1 p2 msg)
-    (if (operate? p1 p2)
-        (if (any-variable? p1)
-            (make-poly (variable p2)
-                       (apply-generic f (term-list p1)
-                                      (term-list p2)))
-            (make-poly (variable p1)
-                       (apply-generic f (term-list p1)
-                                      (term-list p2))))
-        (error msg (list p1 p2))))
-  (define (add-poly p1 p2)
-    (op-poly 'add-terms p1 p2
-             "Polys not in same var -- ADD-POLY"))
-  (define (mul-poly p1 p2)
-    (op-poly 'mul-terms p1 p2
-             "Polys not in same var -- MUL-POLY"))
-  (define (negate-poly p)
-    (make-poly (variable p) (negate-terms (term-list p))))
-
+  <polynomial-operations>
   <generic-termlist-install>
 
   ;; interface to rest of the system
@@ -668,53 +890,21 @@ functions!
      (lambda (p1 p2) (tag (add-poly p1 (negate-poly p2)))))
   (put 'make '(polynomial)
        (lambda (var terms) (tag (make-poly var terms))))
+
+  (run-tests (test-suite
+              "tests for internal polynomial procedures"
+              (check-true (compare-variables 'ANY-VARIABLE #f))
+              (check-false (compare-variables #f 'ANY-VARIABLE))
+              (check-true (compare-variables 'x #f))
+              (check-true (compare-variables 'x 'xa))
+              (check-true (compare-variables 'xa 'xb))
+              (check-true (compare-variables 'x #f))
+              (check-true (compare-variables 'x 'ANY-VARIABLE))
+              (check-false (compare-variables #f 'x))
+              (check-false (compare-variables 'ANY-VARIABLE 'x))
+              ))
+
 )
-]
-
-@subsection{Resuable code}
-
-The following functions are used as-is in both the dense and sparse
-representations. An amibitious person could go and reimplement these
-functions for efficiency. I decided not to for now.
-
-@chunk[<mul-terms>
-(define (mul-terms L1 L2)
-  (if (empty-termlist? L1)
-      (the-empty-termlist)
-      (add-terms (mul-term-by-all-terms (first-term L1) L2)
-                 (mul-terms (rest-terms L1) L2))))
-
-(define (mul-term-by-all-terms t1 L)
-  (if (empty-termlist? L)
-      (the-empty-termlist)
-      (let ((t2 (first-term L)))
-        (adjoin-term
-         (make-term (add (order t1) (order t2))
-                    (mul (coeff t1) (coeff t2)))
-         (mul-term-by-all-terms t1 (rest-terms L))))))
-]
-
-@chunk[<negate-terms>
-(define (negate-terms term-list)
-  (if (empty-termlist? term-list)
-      (the-empty-termlist)
-      (adjoin-term (make-term (order (first-term term-list))
-                              (negate (coeff (first-term term-list))))
-                   (negate-terms (rest-terms term-list)))))
-]
-
-@chunk[<zero-coeff-termlist?>
-  (define (zero-coeff-termlist? term-list)
-    (cond ((null? term-list) #t)
-          ((=zero? (coeff (first-term term-list)))
-           (zero-coeff-termlist? (rest-terms term-list)))
-          (else #f)))
-]
-
-@chunk[<zero-order-termlist?>
-(define (zero-order-termlist? term-list)
-  (and (= 1 (length term-list))
-       (=zero? (order (first-term term-list)))))
 ]
 
 @section{Supporting code}
@@ -730,10 +920,10 @@ generic-arithmetic.scrbl`.
 The full system is composed as follows:
 
 @chunk[<*>
+       <helper-fns>
        <arithmetic-api>
        <generic-dispatch-framework>
        <numbers-packages>
-       <helper-fns>
        <tests>
 ]
 
