@@ -13,11 +13,10 @@ own, this exercise took me a really long time because I got tripped up
 on scoping issues and what data looked like inside/outside each
 package. A *lot* of the code is identical for both dense and sparse
 lists, so I was trying to be tricky and use the polynomial scope for
-all the shared code. However, this ended up breaking things pretty
-severely because so much of the code assumes *untagged* data within
-each package. In the end, it was easier just to copy (using literate
-programming chunks) all the necessary functions into each term list
-representation.
+all the shared code. The first successful attempt opted to just copy
+the relevant code in both packages. The second attempt, now below,
+introduces a new type "term" that allows most of the shared code to be
+handled generically.
 
 @subsection{Supporting both sparse and dense term lists}
 
