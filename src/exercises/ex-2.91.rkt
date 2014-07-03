@@ -34,7 +34,7 @@ An implementation of @racket[div-terms] and @racket[div-poly]:
         (if (> (order t2) (order t1))
             (list (the-empty-termlist L2) L1) ;
             (let ((new-c (div (coeff t1) (coeff t2)))
-                  (new-o (- (order t1) (order t2))))
+                  (new-o (sub (order t1) (order t2))))
               (let ((rest-of-result
                      <div-terms-rest-of-result>
                      ))
@@ -809,6 +809,9 @@ functions!
                      (make-polynomial-sparse 'x '((1 1) (0 -1))))
                (div (make-polynomial-sparse 'x '((5 1) (0 -1)))
                     (make-polynomial-sparse 'x '((2 1) (0 -1)))))
+ (check-equal? (list (make-polynomial-sparse 'x '((5 1/2) (0 -1/2)))
+                     (make-polynomial-sparse 'x '()))
+               (div (make-polynomial-sparse 'x '((5 1) (0 -1))) 2))
  )
 ]
 
