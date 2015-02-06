@@ -4,6 +4,22 @@
 
 @section{Exercise 2.92}
 
+"By imposing an ordering on variables, extend the polynomial package
+so that addition and multiplication of polynomials works for
+polynomials in different variables. (This is not easy!)"
+
+True, not easy. This implementation uses an intermediate extended
+representation to "unroll" (or, more mathematically, distribute) the
+polynomials. The polynomials are then transformed into a canonical
+form such that all variables are represent in order in each
+polynomial. By using a canonical polynomial form, no code for the
+actual operations has to change.
+
+The current system is relatively slow because many transformations are
+repeated over and over as numbers are interconverted to different
+types more than they need to be. Perhaps I will root out these
+inefficiences at some point.
+
 @chunk[<poly-expand-to-terms>
 (define (list-variables p)
   (define (termlist-vars tl)
@@ -22,9 +38,26 @@
   (define (ex-term var order)
     (list var order))
   (define (add-ex-term term tl)
+    (define (adjoin-ex-term term tl)
+      (if (null? tl) (list term)
+          (let* ((ft (car tl))
+                 (vft (car ft))
+                 (oft (cadr ft))
+                 (vt (car term))
+                 (ot (cadr term)))
+            (if (same-variable? vft vt)
+                (cons (ex-term vft
+                               (add oft ot))
+                      (cdr tl))
+                (cons (car tl)
+                      (adjoin-ex-term term (cdr tl)))))))
+
     (if (null? tl) '()
-        (cons (cons (caar tl) (cons term (cdar tl)))
-              (add-ex-term term (cdr tl)))))
+        (let* ((ft (car tl))
+               (coeff (car ft))
+               (eterms (cdr ft)))
+          (cons (cons coeff (adjoin-ex-term term eterms))
+                (add-ex-term term (cdr tl))))))
   (define (poly-expand-help var tlist)
     (if (empty-termlist? tlist) '()
         (let* ((ft (first-term tlist))
@@ -40,6 +73,7 @@
                   (cons c
                         (list (ex-term var o)))
                   (poly-expand-help var (rest-terms tlist))))))))
+;  (trace poly-expand-to-terms)
   (define (poly-expand-sort p)
     (sort
      (map (lambda (t) (cons (car t) (sort (cdr t) compare-expand-terms))) p)
@@ -55,7 +89,158 @@
          (> (cadr t1) (cadr t2)))
         (else
          (compare-variables (car t1) (car t2)))))
-(trace compare-expand-terms)
+
+(define (poly->canon p lv)
+  (define (ex->canon ep)
+    (define (iter a acc)
+      (if (null? a) acc
+          (iter (cdr a)
+                (add (car a) acc))))
+;                (let ((r (add (car a) acc)))
+;                  (if (not (constant? (contents r))) r
+;                      (zero-order-coeff (term-list (contents r))))))))
+    (define (ex-term->poly coeff terms)
+      (if (null? terms)
+          coeff
+          (let* ((ft (car terms))
+                 (var (car ft))
+                 (order (cadr ft)))
+            (make-polynomial-sparse
+             var
+             (list (list order
+                         (ex-term->poly coeff (cdr terms))))))))
+    (define (terms->polys etl)
+      (map (lambda (t) (ex-term->poly (car t) (cdr t)))
+           etl))
+
+    (let ((pl (terms->polys ep)))
+      (if (null? pl)
+          (make-polynomial-sparse 'ANY-VARIABLE '())
+          (iter (cdr pl) (car pl)))))
+
+  (define (ex-terms-fill terms lv)
+    (define (vars->zero-c-terms lv)
+      (if (null? lv) '()
+          (cons (list (car lv) 0)
+                (vars->zero-c-terms (cdr lv)))))
+    (cond
+     ((null? lv) terms)
+     ((null? terms) (vars->zero-c-terms lv))
+     (else
+      (let ((ft (car terms))
+            (v (car lv)))
+        (cond ((same-variable? (car ft) v)
+               (cons ft (ex-terms-fill
+                         (cdr terms) (cdr lv))))
+              ((compare-variables (car ft) v)
+               (cons ft (ex-terms-fill
+                         (cdr terms) lv)))
+              (else
+               (cons (list v 0) (ex-terms-fill
+                                 terms (cdr lv)))))))))
+
+  (if (null? p) '()
+      (let ((pe (map (lambda (t)
+                       (cons (car t) (ex-terms-fill (cdr t) lv)))
+                     (poly-expand-to-terms p))))
+        (ex->canon pe))))
+]
+
+@chunk[<tests-polynomial-indeterminates>
+  ;; test polynomials from JoT's Jottings
+  ;; <http://jots-jottings.blogspot.com/2012/09/sicp-exercise-292-dealing-with.html>
+  (let* ((p1
+          (make-polynomial-dense
+           'x
+           (list
+            5
+            (make-polynomial-dense 'x '(10 6 4))
+            3)))
+         (p1-canon
+          (make-polynomial-dense 'x '(10 11 4 3)))
+         (p2
+          (make-polynomial-dense 'x (list
+                         (make-polynomial-dense 'y
+                                    (list 10
+                                          (make-polynomial-dense 'x '(10 6 4))
+                                          4))
+                         (make-polynomial-dense 'x '(10 6 4))
+                         3)))
+         (p2-canon
+          (make-polynomial-dense
+           'x
+           (list
+            (make-polynomial-dense 'y '(10 0))
+            (make-polynomial-dense 'y '(6 10))
+            (make-polynomial-dense 'y '(10 4 10))
+            4 3)))
+         (p3
+          (make-polynomial-dense 'y
+                     (list
+                      (make-polynomial-dense 'x '(1 5 -3))
+                      (make-polynomial-dense 'x '(2 3 1))
+                      -5)))
+         (p3-canon
+          (make-polynomial-dense
+           'x
+           (list
+            (make-polynomial-dense 'y '(1 2 0))
+            (make-polynomial-dense 'y '(5 3 0))
+            (make-polynomial-dense 'y '(-3 1 -5)))))
+         (p4
+          (make-polynomial-dense
+           'x
+           (list
+            (make-polynomial-dense 'y '(5 2 -1))
+            (make-polynomial-dense 'y '(2 1 2))
+            -3)))
+         (p4-canon p4)
+         (p5
+          (make-polynomial-dense
+           'y
+           (list
+            (make-polynomial-dense 'x '(5 2 0))
+            (make-polynomial-dense 'x '(2 1 0))
+            (make-polynomial-dense 'x '(-1 2 -5)))))
+         (p5-canon
+          (make-polynomial-dense
+           'x
+           (list
+            (make-polynomial-dense 'y '(5 2 -1))
+            (make-polynomial-dense 'y '(2 1 2))
+            -5)))
+         (p6
+          (make-polynomial-dense 'x '(42)))
+         (p6-canon 42))
+
+    (check-true (equ? p1-canon
+                      (poly->canon (contents p1) (list-variables
+                                                  (contents p1)))))
+    (check-true (equ? p2-canon
+                      (poly->canon (contents p2) (list-variables
+                                                  (contents p2)))))
+    (check-true (equ? p3-canon
+                      (poly->canon (contents p3) (list-variables
+                                                  (contents p3)))))
+    (check-true (equ? p4-canon
+                      (poly->canon (contents p4) (list-variables
+                                                  (contents p4)))))
+    (check-true (equ? p5-canon
+                      (poly->canon (contents p5) (list-variables
+                                                  (contents p5)))))
+    (check-true (equ? p6-canon
+                      (poly->canon (contents p6) (list-variables
+                                                  (contents p6)))))
+    (check-true (equ? (make-polynomial-dense
+                       'x
+                       (list
+                        1
+                        (make-polynomial-dense
+                         'y
+                         '(3 6))))
+                      (add (make-polynomial-dense 'x '(1 2))
+                           (make-polynomial-dense 'y '(3 4)))))
+    )
 ]
 
 @section{Exercise 2.91}
@@ -100,13 +285,15 @@ An implementation of @racket[div-terms] and @racket[div-poly]:
 
 @chunk[<div-poly>
 (define (div-poly p1 p2)
-  (let ((final-type (select-termlist-type p1 p2)))
-    (if (operate? p1 p2)
-        (let ((var (select-variable (variable p1) (variable p2))))
-          (map make-poly (list var var)
-               (div-terms (coerce final-type (term-list p1))
-                          (coerce final-type (term-list p2)))))
-        (error "Polys not in the same var -- DIV-POLY" (list p1 p2)))))
+  (let* ((final-type (select-termlist-type p1 p2))
+         (lv1 (list-variables p1))
+         (lv2 (list-variables p2))
+         (lv (sort (set-union lv1 lv2) compare-variables))
+         (cp1 (contents (poly->canon p1 lv)))
+         (cp2 (contents (poly->canon p2 lv))))
+    (map make-poly (list (car lv) (car lv))
+         (div-terms (coerce final-type (term-list cp1))
+                    (coerce final-type (term-list cp2))))))
 ]
 
 @chunk[<install-div-poly>
@@ -195,7 +382,8 @@ a single-argument function that takes a term to add to the term list.
 
 @chunk[<dense-conversion>
 (define (make-from-coeffs coeff-list)
-  (strip-leading-zeros coeff-list))
+  (map drop
+       (strip-leading-zeros coeff-list)))
 (define (make-from-terms raw-list)
   (if (null? raw-list)
       '()
@@ -217,7 +405,8 @@ a single-argument function that takes a term to add to the term list.
 
 @chunk[<sparse-conversion>
 (define (sparse-term-to-term term)
-  (apply make-term term))
+  (make-term (order-sparse term)
+             (drop (coeff-sparse term))))
 (define (to-terms term-list)
   (map sparse-term-to-term term-list))
 
@@ -361,13 +550,15 @@ the one used in the result.
         tl
         ((get 'coerce (list (type-tag tl) type)) (contents tl))))
   (define (op-poly f p1 p2 msg)
-    (let ((final-type (select-termlist-type p1 p2)))
-      (if (operate? p1 p2)
-          (make-poly (select-variable (variable p1)
-                                      (variable p2))
-                     (f (coerce final-type (term-list p1))
-                        (coerce final-type (term-list p2))))
-          (error msg (list p1 p2)))))
+    (let* ((final-type (select-termlist-type p1 p2))
+           (lv1 (list-variables p1))
+           (lv2 (list-variables p2))
+           (lv (sort (set-union lv1 lv2) compare-variables))
+           (cp1 (contents (poly->canon p1 lv)))
+           (cp2 (contents (poly->canon p2 lv))))
+      (make-poly (car lv)
+                 (f (coerce final-type (term-list cp1))
+                    (coerce final-type (term-list cp2))))))
   (define (add-poly p1 p2)
     (op-poly add-terms p1 p2
              "Polys not in same var -- ADD-POLY"))
@@ -377,6 +568,13 @@ the one used in the result.
   <div-poly>
   (define (negate-poly p)
     (make-poly (variable p) (negate-terms (term-list p))))
+
+  (define (zero-order-coeff tl)
+    (cond ((null? tl) 0)
+          ((=zero? (order (first-term tl))))
+;           (order (first-term tl)))
+          (else
+           (zero-order-coeff (rest-terms tl)))))
 ]
 
 @subsection{Term list representations}
@@ -440,8 +638,11 @@ list representations.
   (define (all-zero-coeff? term-list)
     (=zero? (foldl add 0 term-list)))
   (define (zero-order-list? L)
-    (and (= 1 (length L))
-         (=zero? (order (first-term L)))))
+    (cond ((empty-termlist? L) #t)
+          ((= 1 (length L)) #t)
+          ((=zero? (coeff (first-term L)))
+           (zero-order-list? (rest-terms L)))
+          (else #f)))
 
   (put 'make-termlist   '(dense) (lambda (tl) (tag (make-from-coeffs tl))))
   (put 'first-term      '(dense) (lambda (tl) (first-term tl)))
@@ -558,7 +759,7 @@ list representations.
   (put 'equ? '(sparse sparse) (lambda (tl1 tl2)
                                 (and (equal? (map order-sparse tl1)
                                              (map order-sparse tl2))
-                                     (equal? (map coeff-sparse tl1)
+                                     (andmap equ? (map coeff-sparse tl1)
                                              (map coeff-sparse tl2)))))
   <sparse-conversion>
   <tower-level-sparse>
@@ -739,6 +940,11 @@ functions!
  (check-equal? (make-polynomial-dense 'x '(3 1))
                (make-polynomial-dense 'x '(3 1)))
 
+ (check-equal? 1
+               (add (make-polynomial-dense 'x '(1))
+                    (make-polynomial-dense 'x '(0)))
+               "zero poly addition is identity")
+
  (check-equal? (make-polynomial-dense 'x '(2 0 0 1 3))
                (add (make-polynomial-dense 'x '(1 0 0 0 1))
                     (make-polynomial-dense 'x '(1 0 0 1 2))))
@@ -769,15 +975,15 @@ functions!
         (c (make-polynomial-dense 'x (list 2
                                      (make-polynomial-dense 'y '(1 3))
                                      6))))
-   (check-equal? c (add a b))
-   (check-equal? c (add b a)))
+   (check-true (equ? c (add a b)))
+   (check-true (equ? c (add b a))))
 
  (let* ((a (make-polynomial-dense 'x '( 4  0 2  0 1)))
         (b (make-polynomial-dense 'x '( 5  4 0  1 1)))
         (c (make-polynomial-dense 'x '(-1 -4 2 -1 0))))
    (check-equal? c (sub a b))
    (check-equal? (make-polynomial-dense 'x '(4 0 2 0 0))
-                 (sub a 1)))
+                (sub a 1)))
 
  (check-equal? (make-polynomial-dense 'x (list
                                     (make-polynomial-dense 'y '(-1 -1))
@@ -893,13 +1099,10 @@ functions!
   <polynomial-operations>
 
   (define (any-variable? p)
-    (eq? (variable p) ANY-VARIABLE))
+    (eq? (variable p) 'ANY-VARIABLE))
   (define (constant? p)
     (zero-order-termlist? (term-list p)))
-  (define (operate? p1 p2)
-    (or (any-variable? p1) (any-variable? p2)
-        (constant? p1) (constant? p2)
-        (same-variable? (variable p1) (variable p2))))
+  (define (operate? p1 p2) #t)
 
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
@@ -925,8 +1128,9 @@ functions!
 
   (put 'equ? '(polynomial polynomial)
        (lambda (p1 p2)
-         (and (same-variable? (variable p1) (variable p2))
-              (equ? (term-list p1) (term-list p2)))))
+          (and (or (same-variable? (variable p1) (variable p2))
+                   (and (constant? p1) (constant? p2)))
+               (equ? (term-list p1) (term-list p2)))))
   (put 'negate '(polynomial)
        (lambda (x) (tag (negate-poly x))))
   (put 'sub '(polynomial polynomial)
@@ -936,6 +1140,7 @@ functions!
 
   (run-tests (test-suite
               "tests for internal polynomial procedures"
+              <tests-polynomial-indeterminates>
               (check-true (compare-variables 'ANY-VARIABLE #f))
               (check-false (compare-variables #f 'ANY-VARIABLE))
               (check-true (compare-variables 'x #f))
@@ -945,8 +1150,26 @@ functions!
               (check-true (compare-variables 'x 'ANY-VARIABLE))
               (check-false (compare-variables #f 'x))
               (check-false (compare-variables 'ANY-VARIABLE 'x))
-              (check-true (compare-variables 'x 'x))
-
+              (check-false (compare-variables 'x 'x))
+              (check-true (constant?
+                           (make-poly 'x '(sparse (0 0)))))
+              (check-false (constant?
+                            (make-poly 'x '(sparse (1 1)))))
+              (check-true (constant?
+                           (make-poly 'x '(dense)))
+                          "empty dense term-list is a constant polynomial")
+              (check-true (constant?
+                           (make-poly 'x '(dense 1)))
+                          "singular dense term-list is a constant")
+              (check-true (constant?
+                           (make-poly 'x '(dense 4)))
+                          "singular dense term-list is a constant")
+              (check-true (constant?
+                            (make-poly 'x '(dense 0 2)))
+                           "dense term-list with leading zeros is a constant")
+              (check-false (constant?
+                            (make-poly 'x '(dense 1 0 2)))
+                           "dense term-list is not constant")
               (check-equal? '((3 (x 3)) (2 (x 2)) (1 (x 1)) (1 (x 0)))
                             (poly-expand-to-terms (make-poly 'x '(dense 3 2 1 1))))
               (check-equal? '((2 (x 4) (y 1)) (1 (x 4) (y 0)) (1 (x 3)))
@@ -956,7 +1179,8 @@ functions!
                                                          (list 4 (make-polynomial-dense 'y '(2 1)))
                                                          '(3 1)))))
               (check-equal? '(x)
-                            (list-variables (make-poly 'x '(dense 2 1))))
+                            (list-variables
+                             (make-poly 'x '(dense 2 1))))
               (let* ((zp (make-polynomial-dense 'z '(1 0)))
                      (yp (make-polynomial-dense 'y (list 5 4 zp 2 1)))
                      (xp (make-polynomial-dense 'x (list yp 1 0 0 0)))
@@ -967,7 +1191,6 @@ functions!
                               (list-variables (contents rp))))
 
               (check-true (compare-expand-terms '(x 2) '(x 1)))
-
               ))
   )
 ]
@@ -1034,15 +1257,13 @@ The full system is composed as follows:
 (define (tower-level n) (apply-generic 'tower-level n))
 (define (project n) (apply-generic 'project n))
 (define (drop n)
-  (if (list? n)
-      n
-      (let ((project-proc (get 'project (list (type-tag n)))))
-        (if project-proc
-            (let ((projected-n (project-proc (contents n))))
-              (cond ((equal? (tower-level n) LEVEL-LOWEST) projected-n)
-                    ((equ? (raise projected-n) n) (drop projected-n))
-                    (else n)))
-            n))))
+  (let ((project-proc (get 'project (list (type-tag n)))))
+    (if project-proc
+        (let ((projected-n (project-proc (contents n))))
+          (cond ((equal? (tower-level n) LEVEL-LOWEST) projected-n)
+                ((equ? (raise projected-n) n) (drop projected-n))
+                (else n)))
+        n)))
 (define DROPPABLE '(add sub mul div sine cosine arctan sqroot negate))
 ]
 
@@ -1442,6 +1663,24 @@ everything work.
             (iter (cdr l) acc)
             (iter (cdr l) (cons (car l) acc)))))
   (iter a '()))
+
+(define (set-union a b)
+  (cond ((null? a) b)
+        ((null? b) a)
+        ((member (car b) a)
+         (set-union a
+                    (cdr b)))
+        (else
+         (set-union (cons (car b) a)
+                    (cdr b)))))
+(define (set-intersect a b)
+  (cond ((null? a) '())
+        ((null? b) '())
+        ((member (car b) a)
+         (cons (car b)
+               (set-intersect a (cdr b))))
+        (else
+         (set-intersect a (cdr b)))))
 ]
 
 @section{Tests}
