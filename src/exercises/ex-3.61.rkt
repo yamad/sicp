@@ -19,8 +19,12 @@
 ;; 1/S for a power series S with constant term 1.  You will need to use
 ;; `mul-series' from *Note Exercise 3-60::.
 
+; internal definition for memoization. see exercise 3.63 and
+; `sqrt-stream' for reasoning.
 (define (invert-unit-series s)
-  (cons-stream 1 (mul-series (negate-stream (stream-cdr s))
-                             (invert-unit-series s))))
+  (define inv-stream
+    (cons-stream 1 (mul-series (negate-stream (stream-cdr s))
+                               inv-stream)))
+  inv-stream)
 
 (provide invert-unit-series)

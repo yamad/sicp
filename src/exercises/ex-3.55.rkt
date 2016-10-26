@@ -12,3 +12,5 @@
             (rest (stream-cdr stream)))
         (cons-stream head
                      (add-streams (repeat head) (partial-sums rest))))))
+
+(provide partial-sums)

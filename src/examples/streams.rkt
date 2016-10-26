@@ -137,6 +137,36 @@
 (define (fibgen a b) (cons-stream a (fibgen b (+ a b))))
 (define fibs (fibgen 0 1))
 
+;; 3.5.3 exploiting the stream paradigm
+(define (average x y)
+  (/ (+ x y) 2))
+(define (sqrt-improve guess x)
+  (average guess (/ x guess)))
+(define (square x) (* x x))
+
+(define (sqrt-stream x)
+  (define guesses
+    (cons-stream
+     1.0
+     (stream-map (lambda (guess) (sqrt-improve guess x))
+                 guesses)))
+  guesses)
+
+(define (euler-transform s)
+  (let ((s0 (stream-ref s 0))
+        (s1 (stream-ref s 1))
+        (s2 (stream-ref s 2)))
+    (cons-stream (- s2 (/ (square (- s2 s1))
+                          (+ s0 (* -2 s1) s2)))
+                 (euler-transform (stream-cdr s)))))
+
+(define (make-tableau transform s)
+  (cons-stream s (make-tableau transform (transform s))))
+
+(define (accelerated-sequence transform s)
+  (stream-map stream-car (make-tableau transform s)))
+
+
 (provide cons-stream
          cons-stream-no-memo
          stream-null?
@@ -158,4 +188,8 @@
          ones
          integers
          repeat
+         sqrt-stream
+         make-tableau
+         euler-transform
+         accelerated-sequence
          )
