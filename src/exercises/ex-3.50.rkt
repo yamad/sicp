@@ -6,9 +6,13 @@
 (require "../examples/streams.rkt")
 
 (define (stream-map-multiple proc . argstreams)
-  (if (stream-null? (car argstreams))
+  (if (or (stream-null? (car argstreams))
+          (ormap stream-null?
+                  (map stream-car argstreams)))
       the-empty-stream
-      (stream-cons
+      (cons-stream
        (apply proc (map stream-car argstreams))
        (apply stream-map-multiple
               (cons proc (map stream-cdr argstreams))))))
+
+(provide stream-map-multiple)

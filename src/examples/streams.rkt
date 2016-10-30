@@ -103,7 +103,9 @@
        low
        (stream-enumerate-interval (+ low 1) high))))
 
-(define (add-streams s1 s2) (stream-map + s1 s2))
+(define (add-streams a b) (stream-map + a b))
+
+(define (mul-streams a b) (stream-map * a b))
 
 (define (integers-starting-from n)
   (cons-stream n (integers-starting-from (+ n 1))))
@@ -116,6 +118,11 @@
 
 (define (negate-stream s)
   (scale-stream s -1))
+
+(define (list-to-stream l)
+  (if (null? l)
+      the-empty-stream
+      (cons-stream (car l) (list-to-stream (cdr l)))))
 
 ;; defined streams
 ;; ---------------
@@ -166,6 +173,26 @@
 (define (accelerated-sequence transform s)
   (stream-map stream-car (make-tableau transform s)))
 
+(define (integral delayed-integrand initial-value dt)
+  (define int
+    (cons-stream
+     initial-value
+     (let ((integrand (force delayed-integrand)))
+       (add-streams (scale-stream integrand dt)
+                    int))))
+  int)
+
+;; generate stream from list of streams
+;; e.g.
+;;   (list-of-streams integers integers)
+;;    --> (1 1) (2 2) (3 3) ...
+;;
+;;   (list-of-streams integers integers integers)
+;;    --> (1 1 1) (2 2 2) (3 3 3) ...
+;;
+(define (list-of-streams . streams)
+  (cons-stream (map stream-car streams)
+               (apply list-of-streams (map stream-cdr streams))))
 
 (provide cons-stream
          cons-stream-no-memo
@@ -185,6 +212,7 @@
          scale-stream
          negate-stream
          add-streams
+         mul-streams
          ones
          integers
          repeat
@@ -192,4 +220,9 @@
          make-tableau
          euler-transform
          accelerated-sequence
+         list-to-stream
+         integral
+         list-of-streams
+         delay
+         force
          )

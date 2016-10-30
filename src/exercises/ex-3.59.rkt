@@ -37,9 +37,6 @@
 ;;          series; when we use `integrate-series', we will `cons' on the
 ;;          appropriate constant.)
 
-(define (mul-streams a b)
-  (stream-map * a b))
-
 ;; stream of 1/1, 1/2, 1/3, 1/4, ...
 (define unit-fractions
   (stream-map (lambda (x) (/ 1 x)) integers))

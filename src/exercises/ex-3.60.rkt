@@ -14,9 +14,6 @@
 ;; 1, using the series from *Note Exercise 3-59::.
 
 
-(define (mul-streams a b)
-  (stream-map * a b))
-
 ;; solution was looked up. hoping to come back to it to understand it
 ;; It's clear how each line emits part of the full set of pairs from
 ;; s1 and s2, but I don't see how the right terms are added
